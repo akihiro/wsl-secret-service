@@ -2,7 +2,11 @@
 
 package service
 
-import "github.com/godbus/dbus/v5"
+import (
+	"strings"
+
+	"github.com/godbus/dbus/v5"
+)
 
 const (
 	BusName     = "org.freedesktop.secrets"
@@ -42,13 +46,15 @@ func CollectionPath(name string) dbus.ObjectPath {
 }
 
 // ItemPath returns the D-Bus object path for an item within a collection.
+// Hyphens in uuid are replaced with underscores to satisfy D-Bus path rules.
 func ItemPath(collection, uuid string) dbus.ObjectPath {
-	return dbus.ObjectPath(CollectionPathPrefix + collection + "/" + uuid)
+	return dbus.ObjectPath(CollectionPathPrefix + collection + "/" + strings.ReplaceAll(uuid, "-", "_"))
 }
 
 // SessionPath returns the D-Bus object path for a session.
+// Hyphens in uuid are replaced with underscores to satisfy D-Bus path rules.
 func SessionPath(uuid string) dbus.ObjectPath {
-	return dbus.ObjectPath(SessionPathPrefix + uuid)
+	return dbus.ObjectPath(SessionPathPrefix + strings.ReplaceAll(uuid, "-", "_"))
 }
 
 // CollectionNameFromPath extracts the collection name from an object path.
@@ -70,7 +76,9 @@ func CollectionNameFromPath(path dbus.ObjectPath) string {
 }
 
 // ItemUUIDFromPath extracts collection name and item UUID from an item path.
-// e.g., /org/freedesktop/secrets/collection/login/abc-123 -> ("login", "abc-123")
+// Underscores in the UUID segment are converted back to hyphens to match the
+// internal representation stored in the metadata store and backend.
+// e.g., /org/freedesktop/secrets/collection/login/abc_123 -> ("login", "abc-123")
 func ItemUUIDFromPath(path dbus.ObjectPath) (collection, uuid string) {
 	s := string(path)
 	prefix := CollectionPathPrefix
@@ -80,7 +88,7 @@ func ItemUUIDFromPath(path dbus.ObjectPath) (collection, uuid string) {
 	rest := s[len(prefix):]
 	for i, c := range rest {
 		if c == '/' {
-			return rest[:i], rest[i+1:]
+			return rest[:i], strings.ReplaceAll(rest[i+1:], "_", "-")
 		}
 	}
 	return "", ""
