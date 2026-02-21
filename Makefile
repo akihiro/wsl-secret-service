@@ -35,4 +35,3 @@ install: build
 	@echo "  cp wsl-secret-service.service ~/.config/systemd/user/"
 	@echo "  cp org.freedesktop.secrets.service ~/.local/share/dbus-1/services/"
 	@echo "  systemctl --user daemon-reload"
-	@echo "  systemctl --user enable --now wsl-secret-service"
