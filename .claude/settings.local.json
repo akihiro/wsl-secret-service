@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:specifications.freedesktop.org)",
+      "Bash(go mod init:*)",
+      "Bash(GOOS=windows go build:*)",
+      "Bash(go build:*)"
+    ]
+  }
+}

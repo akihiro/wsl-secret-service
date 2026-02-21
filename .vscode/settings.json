@@ -1,5 +1,20 @@
 {
   "go.toolsEnvVars": {
     "GOEXPERIMENT": "runtimesecret"
+  },
+  "chat.tools.terminal.autoApprove": {
+    "/^go test \\./\\.\\.\\.$/": {
+      "approve": true,
+      "matchCommandLine": true
+    },
+    "/^make build 2>&1 \\| head -50$/": {
+      "approve": true,
+      "matchCommandLine": true
+    },
+    "/^make build-linux 2>&1$/": {
+      "approve": true,
+      "matchCommandLine": true
+    },
+    "go": true
   }
 }
