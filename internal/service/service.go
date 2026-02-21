@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log"
 	"math/big"
+	"runtime/secret"
 	"strings"
 
 	"github.com/akihiro/wsl-secret-service/internal/backend"
@@ -176,14 +177,27 @@ func (svc *Service) OpenSession(algorithm string, input dbus.Variant) (dbus.Vari
 		}
 		clientPubKey := new(big.Int).SetBytes(clientPubBytes)
 
-		privKey, pubKey, err := dhGenerateKeyPair()
-		if err != nil {
+		// Perform DH key generation and AES key derivation inside secret.Do so
+		// that the DH private key and shared secret (both allocated within Do)
+		// are marked for eager zeroing by the GC once they become unreachable.
+		// aesKey and serverPubBytes intentionally escape Do to be stored in the
+		// Session and returned to the caller respectively.
+		var aesKey []byte
+		var serverPubBytes []byte
+		var dhErr error
+		secret.Do(func() {
+			var privKey, pubKey *big.Int
+			privKey, pubKey, dhErr = dhGenerateKeyPair()
+			if dhErr != nil {
+				return
+			}
+			aesKey = dhDeriveAESKey(privKey, clientPubKey)
+			serverPubBytes = bigIntToGroupBytes(pubKey)
+		})
+		if dhErr != nil {
 			return dbus.MakeVariant(""), "/",
-				dbusError("org.freedesktop.DBus.Error.Failed", fmt.Sprintf("generate DH key pair: %v", err))
+				dbusError("org.freedesktop.DBus.Error.Failed", fmt.Sprintf("generate DH key pair: %v", dhErr))
 		}
-
-		aesKey := dhDeriveAESKey(privKey, clientPubKey)
-		serverPubBytes := bigIntToGroupBytes(pubKey)
 
 		sess = &Session{
 			path:   SessionPath(uuid.New().String()),

@@ -9,7 +9,7 @@ build: build-linux build-windows
 
 build-linux:
 	@mkdir -p $(BINDIR)
-	CGO_ENABLED=0 GOOS=linux go build -trimpath -buildmode pie -o $(BINDIR)/wsl-secret-service ./cmd/wsl-secret-service
+	CGO_ENABLED=0 GOEXPERIMENT=runtimesecret GOOS=linux go build -trimpath -buildmode pie -o $(BINDIR)/wsl-secret-service ./cmd/wsl-secret-service
 
 # Cross-compile the Windows helper EXE from Linux.
 build-windows:

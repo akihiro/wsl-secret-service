@@ -24,6 +24,7 @@ import (
 	"path/filepath"
 
 	"github.com/akihiro/wsl-secret-service/internal/backend/wincred"
+	"github.com/akihiro/wsl-secret-service/internal/memprotect"
 	"github.com/akihiro/wsl-secret-service/internal/service"
 	"github.com/akihiro/wsl-secret-service/internal/store"
 	"github.com/godbus/dbus/v5"
@@ -37,6 +38,14 @@ func main() {
 
 	log.SetPrefix("wsl-secret-service: ")
 	log.SetFlags(0)
+
+	// Harden the process against memory inspection by same-user processes.
+	// prctl(PR_SET_DUMPABLE,0) blocks /proc/<pid>/mem reads and ptrace.
+	// mlockall pins pages in RAM so secrets never reach swap.
+	if err := memprotect.HardenProcess(); err != nil {
+		log.Fatalf("harden process: %v", err)
+	}
+	log.Printf("memory protections applied")
 
 	// Connect to the session D-Bus.
 	conn, err := dbus.ConnectSessionBus()

@@ -4,6 +4,7 @@ package service
 
 import (
 	"fmt"
+	"runtime/secret"
 	"sync"
 
 	"github.com/godbus/dbus/v5"
@@ -81,8 +82,17 @@ func (s *Session) decryptSecret(params, ciphertext []byte) ([]byte, error) {
 
 // Close implements org.freedesktop.Secret.Session.Close().
 // It removes this session from the service registry and unexports its D-Bus object.
+// The AES session key is wiped inside secret.Do so that the key bytes in the
+// backing array are zeroed and registers that held key material are cleared
+// before returning.  Setting s.aesKey to nil makes the backing array
+// unreachable; because it was allocated inside a secret.Do call in OpenSession,
+// the GC will eagerly zero it when it is collected.
 func (s *Session) Close() *dbus.Error {
 	s.svc.sessions.remove(s.path)
 	_ = s.conn.Export(nil, s.path, SessionIface)
+	secret.Do(func() {
+		clear(s.aesKey)
+		s.aesKey = nil
+	})
 	return nil
 }

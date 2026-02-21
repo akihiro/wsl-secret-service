@@ -1,6 +1,6 @@
 module github.com/akihiro/wsl-secret-service
 
-go 1.25.6
+go 1.26.0
 
 require (
 	github.com/danieljoos/wincred v1.2.3
@@ -8,4 +8,4 @@ require (
 	github.com/google/uuid v1.6.0
 )
 
-require golang.org/x/sys v0.27.0 // indirect
+require golang.org/x/sys v0.27.0
