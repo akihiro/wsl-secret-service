@@ -187,8 +187,14 @@ func TestBase64RoundTrip(t *testing.T) {
 func TestFindHelper_NotFound(t *testing.T) {
 	// Temporarily remove PATH so exec.LookPath fails too.
 	old := os.Getenv("PATH")
-	os.Setenv("PATH", "")
-	defer os.Setenv("PATH", old)
+	if err := os.Setenv("PATH", ""); err != nil {
+		t.Fatalf("clear PATH: %v", err)
+	}
+	defer func() {
+		if err := os.Setenv("PATH", old); err != nil {
+			t.Logf("restore PATH: %v", err)
+		}
+	}()
 
 	_, err := findHelper()
 	if err == nil {

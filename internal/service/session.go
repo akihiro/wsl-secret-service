@@ -52,6 +52,6 @@ type Session struct {
 // It removes this session from the service registry and unexports its D-Bus object.
 func (s *Session) Close() *dbus.Error {
 	s.svc.sessions.remove(s.path)
-	s.conn.Export(nil, s.path, SessionIface)
+	_ = s.conn.Export(nil, s.path, SessionIface)
 	return nil
 }

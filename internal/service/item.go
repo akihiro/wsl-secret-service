@@ -32,9 +32,7 @@ func (i *Item) Delete() (dbus.ObjectPath, *dbus.Error) {
 	path := ItemPath(i.collectionName, i.uuid)
 
 	// Remove from backend (ignore not-found since metadata may exist without a secret).
-	if err := i.svc.backend.Delete(target); err != nil {
-		// Non-fatal if the secret was already gone from the credential store.
-	}
+	_ = i.svc.backend.Delete(target)
 
 	// Remove from metadata store.
 	if err := i.svc.store.DeleteItem(i.collectionName, i.uuid); err != nil {
@@ -42,8 +40,8 @@ func (i *Item) Delete() (dbus.ObjectPath, *dbus.Error) {
 	}
 
 	// Unexport D-Bus object.
-	i.svc.conn.Export(nil, path, ItemIface)
-	i.svc.conn.Export(nil, path, "org.freedesktop.DBus.Properties")
+	_ = i.svc.conn.Export(nil, path, ItemIface)
+	_ = i.svc.conn.Export(nil, path, "org.freedesktop.DBus.Properties")
 
 	// Notify the collection that an item was deleted and update its Items property.
 	i.svc.notifyItemDeleted(i.collectionName, path)

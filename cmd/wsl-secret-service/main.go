@@ -44,7 +44,11 @@ func main() {
 		log.Fatalf("connect to session bus: %v\n"+
 			"hint: ensure DBUS_SESSION_BUS_ADDRESS is set (run: export $(dbus-launch))", err)
 	}
-	defer conn.Close()
+	defer func() {
+		if err := conn.Close(); err != nil {
+			log.Printf("close D-Bus connection: %v", err)
+		}
+	}()
 
 	// Request the well-known bus name.
 	nameFlags := dbus.NameFlagDoNotQueue

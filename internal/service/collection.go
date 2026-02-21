@@ -29,8 +29,8 @@ func (c *Collection) Delete() (dbus.ObjectPath, *dbus.Error) {
 		target := fmt.Sprintf("wsl-ss/%s/%s", c.name, itemUUID)
 		_ = c.svc.backend.Delete(target)
 		itemPath := ItemPath(c.name, itemUUID)
-		c.svc.conn.Export(nil, itemPath, ItemIface)
-		c.svc.conn.Export(nil, itemPath, "org.freedesktop.DBus.Properties")
+		_ = c.svc.conn.Export(nil, itemPath, ItemIface)
+		_ = c.svc.conn.Export(nil, itemPath, "org.freedesktop.DBus.Properties")
 	}
 
 	// Delete from store (removes collection + all items).
@@ -39,8 +39,8 @@ func (c *Collection) Delete() (dbus.ObjectPath, *dbus.Error) {
 	}
 
 	// Unexport collection D-Bus objects.
-	c.svc.conn.Export(nil, path, CollectionIface)
-	c.svc.conn.Export(nil, path, "org.freedesktop.DBus.Properties")
+	_ = c.svc.conn.Export(nil, path, CollectionIface)
+	_ = c.svc.conn.Export(nil, path, "org.freedesktop.DBus.Properties")
 
 	// Remove from in-memory map.
 	delete(c.svc.collections, c.name)
