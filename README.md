@@ -129,6 +129,46 @@ For systemd-managed service, modify the service file or use environment variable
 - Run `go mod tidy` to resolve dependencies
 - Check for CGO requirements (disabled for static builds)
 
+## Testing
+
+### Unit and Integration Tests
+
+Run the standard test suite:
+
+```bash
+make test
+```
+
+This runs Go unit tests for the `store` and `wincred` packages.
+
+### End-to-End Tests
+
+E2E tests verify the full D-Bus API surface using `secret-tool` (from `libsecret-tools`). See [docs/e2e-testing.md](docs/e2e-testing.md) for full details.
+
+**Quick Start**:
+
+```bash
+# Install test dependencies
+sudo apt-get install -y libsecret-tools dbus-tools jq
+
+# Run E2E tests
+make e2e-test
+
+# Verbose mode
+make e2e-test-verbose
+
+# Debug mode (show all commands)
+make e2e-test-debug
+
+# Clean up test environment
+make e2e-clean
+```
+
+E2E tests cover:
+- Collection management (create, list, delete)
+- Secret storage and retrieval with encryption
+- Attribute-based search functionality
+
 ## License
 
 Licensed under the Apache License 2.0. See [LICENSE](LICENSE) for details.

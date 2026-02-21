@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
-.PHONY: build build-linux build-windows test clean install
+.PHONY: build build-linux build-windows test e2e-test e2e-test-verbose e2e-test-debug e2e-clean clean install
 
 # Output directory for compiled binaries.
 BINDIR := bin
@@ -18,6 +18,25 @@ build-windows:
 
 test:
 	go test ./...
+
+# End-to-end tests using secret-tool
+e2e-test: build
+	@bash tests/e2e/run-tests.sh
+
+# Verbose E2E tests
+e2e-test-verbose: build
+	@bash tests/e2e/run-tests.sh -v
+
+# Debug E2E tests (show each command)
+e2e-test-debug: build
+	@bash -x tests/e2e/run-tests.sh -v
+
+# Clean E2E test environment
+e2e-clean:
+	@rm -rf ~/.config/wsl-secret-service/metadata.json
+	@systemctl --user stop wsl-secret-service 2>/dev/null || true
+	@pkill -f wsl-secret-service 2>/dev/null || true
+	@echo "E2E test environment cleaned"
 
 clean:
 	rm -rf $(BINDIR)
