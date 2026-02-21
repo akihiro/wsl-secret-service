@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 // Package backend defines the interface for secret storage backends.
 // The actual secret bytes are stored by implementations of this interface;
 // metadata (labels, attributes) is managed separately by the store package.

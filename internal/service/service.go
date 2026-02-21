@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 // Package service implements the org.freedesktop.Secret.Service D-Bus interface
 // and all sub-objects (Collection, Item, Session, Prompt) required by the
 // Freedesktop.org Secret Service specification version 0.2.

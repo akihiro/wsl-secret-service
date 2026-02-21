@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 //go:build windows
 
 // wincred-helper is a Windows-side companion executable for wsl-secret-service.

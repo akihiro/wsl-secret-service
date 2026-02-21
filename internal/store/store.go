@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 // Package store manages persistent metadata for Secret Service collections and items.
 // Only metadata (labels, attributes, timestamps, content type) is stored here.
 // The actual secret values are stored in the Windows Credential Manager via the backend.

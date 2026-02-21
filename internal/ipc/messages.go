@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 package ipc
 
 // Request is the JSON message sent to wincred-helper.exe on stdin.

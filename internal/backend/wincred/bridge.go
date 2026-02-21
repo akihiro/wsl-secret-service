@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+
 // Package wincred provides a backend that stores secrets in the Windows
 // Credential Manager by invoking a companion wincred-helper.exe via WSL2
 // interop. Communication uses newline-delimited JSON over stdin/stdout.

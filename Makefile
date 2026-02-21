@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+
 .PHONY: build build-linux build-windows test clean install
 
 # Output directory for compiled binaries.
