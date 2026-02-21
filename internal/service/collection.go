@@ -75,10 +75,17 @@ func (c *Collection) CreateItem(
 	secret Secret,
 	replace bool,
 ) (dbus.ObjectPath, dbus.ObjectPath, *dbus.Error) {
-	// Validate session.
-	if _, ok := c.svc.sessions.get(secret.Session); !ok {
+	// Validate session and decrypt the incoming secret value.
+	sess, ok := c.svc.sessions.get(secret.Session)
+	if !ok {
 		return "/", StubPromptPath, dbusError("org.freedesktop.Secret.Error.NoSession",
 			fmt.Sprintf("session %s is not open", secret.Session))
+	}
+
+	plaintext, err := sess.decryptSecret(secret.Parameters, secret.Value)
+	if err != nil {
+		return "/", StubPromptPath, dbusError("org.freedesktop.DBus.Error.Failed",
+			fmt.Sprintf("decrypt secret: %v", err))
 	}
 
 	meta := itemMetaFromProperties(properties)
@@ -102,8 +109,8 @@ func (c *Collection) CreateItem(
 
 	target := fmt.Sprintf("wsl-ss/%s/%s", c.name, targetUUID)
 
-	// Store the secret in the backend.
-	if err := c.svc.backend.Set(target, secret.Value); err != nil {
+	// Store the plaintext secret in the backend.
+	if err := c.svc.backend.Set(target, plaintext); err != nil {
 		return "/", StubPromptPath, dbusError("org.freedesktop.DBus.Error.Failed",
 			fmt.Sprintf("store secret: %v", err))
 	}

@@ -23,10 +23,10 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/godbus/dbus/v5"
 	"github.com/akihiro/wsl-secret-service/internal/backend/wincred"
 	"github.com/akihiro/wsl-secret-service/internal/service"
 	"github.com/akihiro/wsl-secret-service/internal/store"
+	"github.com/godbus/dbus/v5"
 )
 
 func main() {

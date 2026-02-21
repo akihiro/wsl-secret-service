@@ -8,6 +8,7 @@ package service
 import (
 	"fmt"
 	"log"
+	"math/big"
 	"strings"
 
 	"github.com/akihiro/wsl-secret-service/internal/backend"
@@ -157,30 +158,55 @@ func (svc *Service) watchNameOwnerChanged() {
 // --- org.freedesktop.Secret.Service methods ---
 
 // OpenSession implements Service.OpenSession(algorithm, input).
-// Only "plain" is supported. Returns (empty_variant, sessionPath).
+// Supports "plain" and "dh-ietf1024-sha256-aes128-cbc-pkcs7".
 func (svc *Service) OpenSession(algorithm string, input dbus.Variant) (dbus.Variant, dbus.ObjectPath, *dbus.Error) {
-	if algorithm != "plain" {
-		return dbus.MakeVariant(""),
-			"/",
+	var sess *Session
+	var output dbus.Variant
+
+	switch algorithm {
+	case "plain":
+		sess = &Session{path: SessionPath(uuid.New().String()), conn: svc.conn, svc: svc}
+		output = dbus.MakeVariant("")
+
+	case "dh-ietf1024-sha256-aes128-cbc-pkcs7":
+		clientPubBytes, ok := input.Value().([]byte)
+		if !ok || len(clientPubBytes) == 0 {
+			return dbus.MakeVariant(""), "/",
+				dbusError("org.freedesktop.DBus.Error.InvalidArgs", "expected client DH public key as byte array")
+		}
+		clientPubKey := new(big.Int).SetBytes(clientPubBytes)
+
+		privKey, pubKey, err := dhGenerateKeyPair()
+		if err != nil {
+			return dbus.MakeVariant(""), "/",
+				dbusError("org.freedesktop.DBus.Error.Failed", fmt.Sprintf("generate DH key pair: %v", err))
+		}
+
+		aesKey := dhDeriveAESKey(privKey, clientPubKey)
+		serverPubBytes := bigIntToGroupBytes(pubKey)
+
+		sess = &Session{
+			path:   SessionPath(uuid.New().String()),
+			conn:   svc.conn,
+			svc:    svc,
+			aesKey: aesKey,
+		}
+		output = dbus.MakeVariant(serverPubBytes)
+
+	default:
+		return dbus.MakeVariant(""), "/",
 			&dbus.Error{
 				Name: "org.freedesktop.Secret.Error.NotSupported",
-				Body: []interface{}{"only 'plain' session algorithm is supported"},
+				Body: []any{fmt.Sprintf("unsupported session algorithm %q", algorithm)},
 			}
 	}
 
-	sessionUUID := uuid.New().String()
-	sessionPath := SessionPath(sessionUUID)
-
-	sess := &Session{path: sessionPath, conn: svc.conn, svc: svc}
-
-	// Export the Session interface.
-	if err := svc.conn.Export(sess, sessionPath, SessionIface); err != nil {
+	if err := svc.conn.Export(sess, sess.path, SessionIface); err != nil {
 		return dbus.MakeVariant(""), "/",
 			dbusError("org.freedesktop.DBus.Error.Failed", fmt.Sprintf("export session: %v", err))
 	}
-
 	svc.sessions.add(sess)
-	return dbus.MakeVariant(""), sessionPath, nil
+	return output, sess.path, nil
 }
 
 // CreateCollection implements Service.CreateCollection(properties, alias).
@@ -269,7 +295,8 @@ func (svc *Service) GetSecrets(
 	items []dbus.ObjectPath,
 	session dbus.ObjectPath,
 ) (map[dbus.ObjectPath]Secret, *dbus.Error) {
-	if _, ok := svc.sessions.get(session); !ok {
+	sess, ok := svc.sessions.get(session)
+	if !ok {
 		return nil, dbusError("org.freedesktop.Secret.Error.NoSession",
 			fmt.Sprintf("session %s is not open", session))
 	}
@@ -293,10 +320,15 @@ func (svc *Service) GetSecrets(
 		if ct == "" {
 			ct = "text/plain; charset=utf8"
 		}
+		params, value, err := sess.encryptSecret(secretBytes)
+		if err != nil {
+			log.Printf("warning: could not encrypt secret for %s: %v", itemPath, err)
+			continue
+		}
 		result[itemPath] = Secret{
 			Session:     session,
-			Parameters:  []byte{},
-			Value:       secretBytes,
+			Parameters:  params,
+			Value:       value,
 			ContentType: ct,
 		}
 	}

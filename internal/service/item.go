@@ -5,9 +5,9 @@ package service
 import (
 	"fmt"
 
+	"github.com/akihiro/wsl-secret-service/internal/store"
 	"github.com/godbus/dbus/v5"
 	"github.com/godbus/dbus/v5/prop"
-	"github.com/akihiro/wsl-secret-service/internal/store"
 )
 
 // Item implements the org.freedesktop.Secret.Item D-Bus interface.
@@ -50,10 +50,9 @@ func (i *Item) Delete() (dbus.ObjectPath, *dbus.Error) {
 }
 
 // GetSecret implements org.freedesktop.Secret.Item.GetSecret(session).
-// Returns a Secret struct with the raw value (plain algorithm — no encryption).
 func (i *Item) GetSecret(session dbus.ObjectPath) (Secret, *dbus.Error) {
-	// Validate session exists.
-	if _, ok := i.svc.sessions.get(session); !ok {
+	sess, ok := i.svc.sessions.get(session)
+	if !ok {
 		return Secret{}, dbusError("org.freedesktop.Secret.Error.NoSession",
 			fmt.Sprintf("session %s is not open", session))
 	}
@@ -75,10 +74,16 @@ func (i *Item) GetSecret(session dbus.ObjectPath) (Secret, *dbus.Error) {
 		ct = "text/plain; charset=utf8"
 	}
 
+	params, value, err := sess.encryptSecret(secretBytes)
+	if err != nil {
+		return Secret{}, dbusError("org.freedesktop.DBus.Error.Failed",
+			fmt.Sprintf("encrypt secret: %v", err))
+	}
+
 	return Secret{
 		Session:     session,
-		Parameters:  []byte{},
-		Value:       secretBytes,
+		Parameters:  params,
+		Value:       value,
 		ContentType: ct,
 	}, nil
 }
@@ -86,12 +91,19 @@ func (i *Item) GetSecret(session dbus.ObjectPath) (Secret, *dbus.Error) {
 // SetSecret implements org.freedesktop.Secret.Item.SetSecret(secret).
 // Stores the new secret value and updates the Modified timestamp.
 func (i *Item) SetSecret(secret Secret) *dbus.Error {
-	if _, ok := i.svc.sessions.get(secret.Session); !ok {
+	sess, ok := i.svc.sessions.get(secret.Session)
+	if !ok {
 		return dbusError("org.freedesktop.Secret.Error.NoSession",
 			fmt.Sprintf("session %s is not open", secret.Session))
 	}
 
-	if err := i.svc.backend.Set(i.itemTarget(), secret.Value); err != nil {
+	plaintext, err := sess.decryptSecret(secret.Parameters, secret.Value)
+	if err != nil {
+		return dbusError("org.freedesktop.DBus.Error.Failed",
+			fmt.Sprintf("decrypt secret: %v", err))
+	}
+
+	if err := i.svc.backend.Set(i.itemTarget(), plaintext); err != nil {
 		return dbusError("org.freedesktop.DBus.Error.Failed",
 			fmt.Sprintf("store secret: %v", err))
 	}
