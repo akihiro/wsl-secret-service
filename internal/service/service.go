@@ -6,11 +6,14 @@
 package service
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"math/big"
 	"runtime/secret"
 	"strings"
+	"sync/atomic"
+	"time"
 
 	"github.com/akihiro/wsl-secret-service/internal/backend"
 	"github.com/akihiro/wsl-secret-service/internal/store"
@@ -22,28 +25,43 @@ import (
 // Service is the root D-Bus object at /org/freedesktop/secrets.
 // It implements org.freedesktop.Secret.Service.
 type Service struct {
-	conn        *dbus.Conn
-	store       *store.Store
-	backend     backend.Backend
-	sessions    *sessionRegistry
-	collections map[string]*Collection // keyed by collection name
-	svcProps    *prop.Properties
+	conn                  *dbus.Conn
+	store                 *store.Store
+	backend               backend.Backend
+	sessions              *sessionRegistry
+	collections           map[string]*Collection // keyed by collection name
+	svcProps              *prop.Properties
+	lastActivityTimestamp atomic.Int64       // unix timestamp of last API call
+	timeoutDuration       int64              // timeout threshold in seconds
+	shutdownFn            context.CancelFunc // to trigger graceful shutdown
 }
 
 // New creates and fully initialises the Secret Service:
 //   - exports all D-Bus objects (Service, existing Collections, their Items, the stub Prompt)
 //   - subscribes to NameOwnerChanged to clean up orphaned sessions
+//   - starts idle timeout monitor with the given timeout duration
 //
 // The caller is responsible for requesting the well-known bus name before
 // calling New, or passing replaceExisting=true to RequestName.
-func New(conn *dbus.Conn, st *store.Store, be backend.Backend) (*Service, error) {
+func New(ctx context.Context, conn *dbus.Conn, st *store.Store, be backend.Backend, timeoutDuration time.Duration) (*Service, error) {
 	svc := &Service{
-		conn:        conn,
-		store:       st,
-		backend:     be,
-		sessions:    newSessionRegistry(),
-		collections: make(map[string]*Collection),
+		conn:                  conn,
+		store:                 st,
+		backend:               be,
+		sessions:              newSessionRegistry(),
+		collections:           make(map[string]*Collection),
+		lastActivityTimestamp: atomic.Int64{},
+		timeoutDuration:       int64(timeoutDuration.Seconds()),
+		shutdownFn:            nil, // will be set from context
 	}
+
+	// Extract cancel function from context (will be used by timeout monitor)
+	// We need a context with cancel, so create one if background context is passed
+	ctxWithCancel, cancel := context.WithCancel(ctx)
+	svc.shutdownFn = cancel
+
+	// Initialize activity timestamp to current time
+	svc.lastActivityTimestamp.Store(time.Now().Unix())
 
 	// Export Service methods.
 	if err := conn.Export(svc, dbus.ObjectPath(ServicePath), ServiceIface); err != nil {
@@ -71,6 +89,9 @@ func New(conn *dbus.Conn, st *store.Store, be backend.Backend) (*Service, error)
 	// Subscribe to NameOwnerChanged to clean up sessions when clients disconnect.
 	conn.BusObject().AddMatchSignal("org.freedesktop.DBus", "NameOwnerChanged")
 	go svc.watchNameOwnerChanged()
+
+	// Start the idle timeout monitor.
+	svc.startTimeoutMonitor(ctxWithCancel)
 
 	return svc, nil
 }
@@ -156,11 +177,54 @@ func (svc *Service) watchNameOwnerChanged() {
 	}
 }
 
-// --- org.freedesktop.Secret.Service methods ---
+// recordActivity updates the last API activity timestamp to the current time.
+func (svc *Service) recordActivity() {
+	svc.lastActivityTimestamp.Store(time.Now().Unix())
+}
+
+// startTimeoutMonitor launches a background goroutine that monitors idle timeout.
+// It sleeps until the calculated timeout deadline, then checks if the timeout has been exceeded.
+// If so, it calls the shutdown function. Otherwise, it recalculates and sleeps again.
+func (svc *Service) startTimeoutMonitor(ctx context.Context) {
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+
+			// Get the last activity timestamp and calculate when timeout will occur
+			lastActivity := svc.lastActivityTimestamp.Load()
+			timeoutDeadline := lastActivity + svc.timeoutDuration
+			now := time.Now().Unix()
+
+			if now >= timeoutDeadline {
+				// Idle timeout exceeded, initiate graceful shutdown
+				log.Printf("idle timeout (%d seconds) exceeded, initiating shutdown", svc.timeoutDuration)
+				svc.shutdownFn()
+				return
+			}
+
+			// Calculate sleep duration until timeout deadline
+			sleepDuration := time.Duration(timeoutDeadline-now) * time.Second
+
+			// Sleep until the next check or context cancellation
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(sleepDuration):
+				// Continue loop to check timeout condition again
+			}
+		}
+	}()
+}
 
 // OpenSession implements Service.OpenSession(algorithm, input).
 // Supports "plain" and "dh-ietf1024-sha256-aes128-cbc-pkcs7".
 func (svc *Service) OpenSession(algorithm string, input dbus.Variant) (dbus.Variant, dbus.ObjectPath, *dbus.Error) {
+	svc.recordActivity()
+
 	var sess *Session
 	var output dbus.Variant
 
@@ -230,6 +294,8 @@ func (svc *Service) CreateCollection(
 	properties map[string]dbus.Variant,
 	alias string,
 ) (dbus.ObjectPath, dbus.ObjectPath, *dbus.Error) {
+	svc.recordActivity()
+
 	// If the alias already resolves, return that collection.
 	if alias != "" {
 		if existing := svc.store.GetAlias(alias); existing != "" {
@@ -283,6 +349,8 @@ func (svc *Service) CreateCollection(
 // SearchItems implements Service.SearchItems(attributes).
 // Returns (unlocked, locked) — all items are always unlocked.
 func (svc *Service) SearchItems(attributes map[string]string) ([]dbus.ObjectPath, []dbus.ObjectPath, *dbus.Error) {
+	svc.recordActivity()
+
 	refs := svc.store.SearchItems(attributes)
 	paths := make([]dbus.ObjectPath, len(refs))
 	for i, ref := range refs {
@@ -294,12 +362,16 @@ func (svc *Service) SearchItems(attributes map[string]string) ([]dbus.ObjectPath
 // Unlock implements Service.Unlock(objects).
 // All objects are always unlocked. Returns (objects, "/").
 func (svc *Service) Unlock(objects []dbus.ObjectPath) ([]dbus.ObjectPath, dbus.ObjectPath, *dbus.Error) {
+	svc.recordActivity()
+
 	return objects, StubPromptPath, nil
 }
 
 // Lock implements Service.Lock(objects).
 // Locking is not supported; returns ([], "/").
 func (svc *Service) Lock(objects []dbus.ObjectPath) ([]dbus.ObjectPath, dbus.ObjectPath, *dbus.Error) {
+	svc.recordActivity()
+
 	return []dbus.ObjectPath{}, StubPromptPath, nil
 }
 
@@ -309,6 +381,8 @@ func (svc *Service) GetSecrets(
 	items []dbus.ObjectPath,
 	session dbus.ObjectPath,
 ) (map[dbus.ObjectPath]Secret, *dbus.Error) {
+	svc.recordActivity()
+
 	sess, ok := svc.sessions.get(session)
 	if !ok {
 		return nil, dbusError("org.freedesktop.Secret.Error.NoSession",
@@ -352,6 +426,8 @@ func (svc *Service) GetSecrets(
 // ReadAlias implements Service.ReadAlias(name).
 // Returns the collection path for the given alias, or "/" if not found.
 func (svc *Service) ReadAlias(name string) (dbus.ObjectPath, *dbus.Error) {
+	svc.recordActivity()
+
 	colName := svc.store.GetAlias(name)
 	if colName == "" {
 		return "/", nil
@@ -362,6 +438,8 @@ func (svc *Service) ReadAlias(name string) (dbus.ObjectPath, *dbus.Error) {
 // SetAlias implements Service.SetAlias(name, collection).
 // Passing "/" or "" as collection removes the alias.
 func (svc *Service) SetAlias(name string, collection dbus.ObjectPath) *dbus.Error {
+	svc.recordActivity()
+
 	colStr := string(collection)
 	if colStr == "/" || colStr == "" {
 		if err := svc.store.SetAlias(name, ""); err != nil {

@@ -28,6 +28,8 @@ func (i *Item) itemTarget() string {
 // Removes the item from the metadata store and backend, then unexports the D-Bus object.
 // Returns "/" (no prompt needed).
 func (i *Item) Delete() (dbus.ObjectPath, *dbus.Error) {
+	i.svc.recordActivity()
+
 	target := i.itemTarget()
 	path := ItemPath(i.collectionName, i.uuid)
 
@@ -51,6 +53,8 @@ func (i *Item) Delete() (dbus.ObjectPath, *dbus.Error) {
 
 // GetSecret implements org.freedesktop.Secret.Item.GetSecret(session).
 func (i *Item) GetSecret(session dbus.ObjectPath) (Secret, *dbus.Error) {
+	i.svc.recordActivity()
+
 	sess, ok := i.svc.sessions.get(session)
 	if !ok {
 		return Secret{}, dbusError("org.freedesktop.Secret.Error.NoSession",
@@ -91,6 +95,8 @@ func (i *Item) GetSecret(session dbus.ObjectPath) (Secret, *dbus.Error) {
 // SetSecret implements org.freedesktop.Secret.Item.SetSecret(secret).
 // Stores the new secret value and updates the Modified timestamp.
 func (i *Item) SetSecret(secret Secret) *dbus.Error {
+	i.svc.recordActivity()
+
 	sess, ok := i.svc.sessions.get(secret.Session)
 	if !ok {
 		return dbusError("org.freedesktop.Secret.Error.NoSession",

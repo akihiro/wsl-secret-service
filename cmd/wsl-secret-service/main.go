@@ -19,10 +19,14 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"log"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
+	"time"
 
 	"github.com/akihiro/wsl-secret-service/internal/backend/wincred"
 	"github.com/akihiro/wsl-secret-service/internal/memprotect"
@@ -36,6 +40,7 @@ func main() {
 	helperPath := flag.String("helper-path", "", "path to wincred-helper.exe (auto-discovered if empty)")
 	replace := flag.Bool("replace", false, "replace an existing org.freedesktop.secrets owner")
 	disableMemprotect := flag.Bool("disable-memprotect", false, "[DEBUG] disable memory protection (prctl, mlockall)")
+	timeout := flag.Duration("timeout", 30*time.Second, "shutdown daemon after this period of inactivity")
 	flag.Parse()
 
 	log.SetPrefix("wsl-secret-service: ")
@@ -94,14 +99,28 @@ func main() {
 	}
 	log.Printf("wincred backend ready")
 
-	// Start the Secret Service.
-	if _, err := service.New(conn, st, be); err != nil {
+	// Create a context for graceful shutdown.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Start the Secret Service with timeout.
+	if _, err := service.New(ctx, conn, st, be, *timeout); err != nil {
 		log.Fatalf("start secret service: %v", err)
 	}
 	log.Printf("org.freedesktop.secrets is ready")
 
-	// Block until the D-Bus connection closes.
-	select {}
+	// Set up signal handling for graceful shutdown.
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGTERM, syscall.SIGINT)
+
+	// Block until shutdown signal or context cancellation.
+	select {
+	case <-ctx.Done():
+		log.Printf("shutdown initiated (idle timeout)")
+	case sig := <-sigChan:
+		log.Printf("received signal: %v, shutting down", sig)
+		cancel()
+	}
 }
 
 // defaultConfigDir returns the XDG-compliant config directory for the service.

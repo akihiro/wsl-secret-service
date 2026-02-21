@@ -88,6 +88,8 @@ func (s *Session) decryptSecret(params, ciphertext []byte) ([]byte, error) {
 // unreachable; because it was allocated inside a secret.Do call in OpenSession,
 // the GC will eagerly zero it when it is collected.
 func (s *Session) Close() *dbus.Error {
+	s.svc.recordActivity()
+
 	s.svc.sessions.remove(s.path)
 	_ = s.conn.Export(nil, s.path, SessionIface)
 	secret.Do(func() {

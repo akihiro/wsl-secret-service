@@ -22,6 +22,8 @@ type Collection struct {
 // Removes all items from the backend and metadata store, then unexports the object.
 // Returns "/" (no prompt needed).
 func (c *Collection) Delete() (dbus.ObjectPath, *dbus.Error) {
+	c.svc.recordActivity()
+
 	path := CollectionPath(c.name)
 
 	// Delete all items from backend and store.
@@ -59,6 +61,8 @@ func (c *Collection) Delete() (dbus.ObjectPath, *dbus.Error) {
 // SearchItems implements org.freedesktop.Secret.Collection.SearchItems(attributes).
 // Returns all item paths in this collection whose attributes are a superset of attrs.
 func (c *Collection) SearchItems(attributes map[string]string) ([]dbus.ObjectPath, *dbus.Error) {
+	c.svc.recordActivity()
+
 	refs := c.svc.store.SearchItemsInCollection(c.name, attributes)
 	paths := make([]dbus.ObjectPath, len(refs))
 	for i, ref := range refs {
@@ -75,6 +79,8 @@ func (c *Collection) CreateItem(
 	secret Secret,
 	replace bool,
 ) (dbus.ObjectPath, dbus.ObjectPath, *dbus.Error) {
+	c.svc.recordActivity()
+
 	// Validate session and decrypt the incoming secret value.
 	sess, ok := c.svc.sessions.get(secret.Session)
 	if !ok {

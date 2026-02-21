@@ -39,4 +39,3 @@ func HardenProcess() error {
 
 	return nil
 }
-
