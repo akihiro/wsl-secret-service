@@ -76,27 +76,34 @@ func (c *Collection) SearchItems(attributes map[string]string) ([]dbus.ObjectPat
 // Returns (itemPath, "/") — no prompt is ever needed.
 func (c *Collection) CreateItem(
 	properties map[string]dbus.Variant,
-	secret Secret,
+	secret dbus.Variant,
 	replace bool,
 ) (dbus.ObjectPath, dbus.ObjectPath, *dbus.Error) {
 	c.svc.recordActivity()
 
-	// Validate session and decrypt the incoming secret value.
-	sess, ok := c.svc.sessions.get(secret.Session)
-	if !ok {
-		return "/", StubPromptPath, dbusError("org.freedesktop.Secret.Error.NoSession",
-			fmt.Sprintf("session %s is not open", secret.Session))
+	// Unmarshal the secret variant into the Secret struct.
+	var sec Secret
+	if err := secret.Store(&sec); err != nil {
+		return "/", StubPromptPath, dbusError("org.freedesktop.DBus.Error.InvalidArgs",
+			fmt.Sprintf("invalid secret variant: %v", err))
 	}
 
-	plaintext, err := sess.decryptSecret(secret.Parameters, secret.Value)
+	// Validate session and decrypt the incoming secret value.
+	sess, ok := c.svc.sessions.get(sec.Session)
+	if !ok {
+		return "/", StubPromptPath, dbusError("org.freedesktop.Secret.Error.NoSession",
+			fmt.Sprintf("session %s is not open", sec.Session))
+	}
+
+	plaintext, err := sess.decryptSecret(sec.Parameters, sec.Value)
 	if err != nil {
 		return "/", StubPromptPath, dbusError("org.freedesktop.DBus.Error.Failed",
 			fmt.Sprintf("decrypt secret: %v", err))
 	}
 
 	meta := itemMetaFromProperties(properties)
-	if meta.ContentType == "" && secret.ContentType != "" {
-		meta.ContentType = secret.ContentType
+	if meta.ContentType == "" && sec.ContentType != "" {
+		meta.ContentType = sec.ContentType
 	}
 
 	// Check for replace: look for an existing item with identical attributes.

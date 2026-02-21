@@ -52,24 +52,24 @@ func (i *Item) Delete() (dbus.ObjectPath, *dbus.Error) {
 }
 
 // GetSecret implements org.freedesktop.Secret.Item.GetSecret(session).
-func (i *Item) GetSecret(session dbus.ObjectPath) (Secret, *dbus.Error) {
+func (i *Item) GetSecret(session dbus.ObjectPath) (dbus.Variant, *dbus.Error) {
 	i.svc.recordActivity()
 
 	sess, ok := i.svc.sessions.get(session)
 	if !ok {
-		return Secret{}, dbusError("org.freedesktop.Secret.Error.NoSession",
+		return dbus.Variant{}, dbusError("org.freedesktop.Secret.Error.NoSession",
 			fmt.Sprintf("session %s is not open", session))
 	}
 
 	meta, ok := i.svc.store.GetItem(i.collectionName, i.uuid)
 	if !ok {
-		return Secret{}, dbusError("org.freedesktop.Secret.Error.NoSuchObject",
+		return dbus.Variant{}, dbusError("org.freedesktop.Secret.Error.NoSuchObject",
 			fmt.Sprintf("item %s/%s not found", i.collectionName, i.uuid))
 	}
 
 	secretBytes, err := i.svc.backend.Get(i.itemTarget())
 	if err != nil {
-		return Secret{}, dbusError("org.freedesktop.Secret.Error.IsLocked",
+		return dbus.Variant{}, dbusError("org.freedesktop.Secret.Error.IsLocked",
 			fmt.Sprintf("retrieve secret: %v", err))
 	}
 
@@ -80,30 +80,38 @@ func (i *Item) GetSecret(session dbus.ObjectPath) (Secret, *dbus.Error) {
 
 	params, value, err := sess.encryptSecret(secretBytes)
 	if err != nil {
-		return Secret{}, dbusError("org.freedesktop.DBus.Error.Failed",
+		return dbus.Variant{}, dbusError("org.freedesktop.DBus.Error.Failed",
 			fmt.Sprintf("encrypt secret: %v", err))
 	}
 
-	return Secret{
+	secret := Secret{
 		Session:     session,
 		Parameters:  params,
 		Value:       value,
 		ContentType: ct,
-	}, nil
+	}
+	return dbus.MakeVariant(secret), nil
 }
 
 // SetSecret implements org.freedesktop.Secret.Item.SetSecret(secret).
 // Stores the new secret value and updates the Modified timestamp.
-func (i *Item) SetSecret(secret Secret) *dbus.Error {
+func (i *Item) SetSecret(secret dbus.Variant) *dbus.Error {
 	i.svc.recordActivity()
 
-	sess, ok := i.svc.sessions.get(secret.Session)
-	if !ok {
-		return dbusError("org.freedesktop.Secret.Error.NoSession",
-			fmt.Sprintf("session %s is not open", secret.Session))
+	// Unmarshal the secret variant into the Secret struct.
+	var sec Secret
+	if err := secret.Store(&sec); err != nil {
+		return dbusError("org.freedesktop.DBus.Error.InvalidArgs",
+			fmt.Sprintf("invalid secret variant: %v", err))
 	}
 
-	plaintext, err := sess.decryptSecret(secret.Parameters, secret.Value)
+	sess, ok := i.svc.sessions.get(sec.Session)
+	if !ok {
+		return dbusError("org.freedesktop.Secret.Error.NoSession",
+			fmt.Sprintf("session %s is not open", sec.Session))
+	}
+
+	plaintext, err := sess.decryptSecret(sec.Parameters, sec.Value)
 	if err != nil {
 		return dbusError("org.freedesktop.DBus.Error.Failed",
 			fmt.Sprintf("decrypt secret: %v", err))
@@ -117,7 +125,7 @@ func (i *Item) SetSecret(secret Secret) *dbus.Error {
 	// Update content type and modified timestamp in the store.
 	meta, ok := i.svc.store.GetItem(i.collectionName, i.uuid)
 	if ok {
-		meta.ContentType = secret.ContentType
+		meta.ContentType = sec.ContentType
 		_ = i.svc.store.UpdateItem(i.collectionName, i.uuid, meta)
 	}
 
