@@ -12,9 +12,10 @@
 //
 // Flags:
 //
-//	--config-dir   path   Config/metadata directory (default: $XDG_CONFIG_HOME/wsl-secret-service)
-//	--helper-path  path   Path to wincred-helper.exe (default: auto-discover)
-//	--replace            Replace an existing org.freedesktop.secrets name owner
+//	--config-dir         path   Config/metadata directory (default: $XDG_CONFIG_HOME/wsl-secret-service)
+//	--helper-path        path   Path to wincred-helper.exe (default: auto-discover)
+//	--replace                   Replace an existing org.freedesktop.secrets name owner
+//	--disable-memprotect        [DEBUG] Disable memory protection (prctl, mlockall)
 package main
 
 import (
@@ -34,6 +35,7 @@ func main() {
 	configDir := flag.String("config-dir", defaultConfigDir(), "metadata storage directory")
 	helperPath := flag.String("helper-path", "", "path to wincred-helper.exe (auto-discovered if empty)")
 	replace := flag.Bool("replace", false, "replace an existing org.freedesktop.secrets owner")
+	disableMemprotect := flag.Bool("disable-memprotect", false, "[DEBUG] disable memory protection (prctl, mlockall)")
 	flag.Parse()
 
 	log.SetPrefix("wsl-secret-service: ")
@@ -42,10 +44,14 @@ func main() {
 	// Harden the process against memory inspection by same-user processes.
 	// prctl(PR_SET_DUMPABLE,0) blocks /proc/<pid>/mem reads and ptrace.
 	// mlockall pins pages in RAM so secrets never reach swap.
-	if err := memprotect.HardenProcess(); err != nil {
-		log.Fatalf("harden process: %v", err)
+	if *disableMemprotect {
+		log.Printf("[DEBUG] memory protection disabled")
+	} else {
+		if err := memprotect.HardenProcess(); err != nil {
+			log.Fatalf("harden process: %v", err)
+		}
+		log.Printf("memory protections applied")
 	}
-	log.Printf("memory protections applied")
 
 	// Connect to the session D-Bus.
 	conn, err := dbus.ConnectSessionBus()
