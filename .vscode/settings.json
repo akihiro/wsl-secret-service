@@ -3,7 +3,7 @@
     "GOEXPERIMENT": "runtimesecret"
   },
   "chat.tools.terminal.autoApprove": {
-    "/^go test \\./\\.\\.\\.$/": {
+    "/^go test /": {
       "approve": true,
       "matchCommandLine": true
     },
@@ -15,6 +15,7 @@
       "approve": true,
       "matchCommandLine": true
     },
-    "go": true
+    "go": true,
+    "make": true
   }
 }
