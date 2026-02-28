@@ -200,6 +200,13 @@ func (svc *Service) exportItem(item *Item) error {
 		return fmt.Errorf("export item properties at %s: %w", path, err)
 	}
 	item.props = props
+
+	// Explicitly export the standard D-Bus Properties interface for proper introspection.
+	// This ensures clients can discover that the object implements org.freedesktop.DBus.Properties.
+	if err := svc.conn.Export(item, path, "org.freedesktop.DBus.Properties"); err != nil {
+		return fmt.Errorf("export item properties interface at %s: %w", path, err)
+	}
+
 	return nil
 }
 

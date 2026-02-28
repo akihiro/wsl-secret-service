@@ -86,6 +86,9 @@ func New(ctx context.Context, conn *dbus.Conn, st *store.Store, be backend.Backe
 		}
 	}
 
+	// Export collections also at their alias paths.
+	svc.exportAliasedCollections()
+
 	// Subscribe to NameOwnerChanged to clean up sessions when clients disconnect.
 	conn.BusObject().AddMatchSignal("org.freedesktop.DBus", "NameOwnerChanged")
 	go svc.watchNameOwnerChanged()
@@ -137,6 +140,32 @@ func (svc *Service) loadCollection(name string) error {
 		}
 	}
 	return nil
+}
+
+// exportAliasedCollections exports all collections at their alias paths.
+// This allows clients like secret-tool to access collections via aliases
+// (e.g., /org/freedesktop/secrets/aliases/default).
+func (svc *Service) exportAliasedCollections() {
+	aliases := svc.store.ListAliases()
+	for alias, colName := range aliases {
+		svc.exportCollectionAtAlias(alias, colName)
+	}
+}
+
+// exportCollectionAtAlias exports a collection at a specific alias path.
+func (svc *Service) exportCollectionAtAlias(alias, colName string) {
+	col, ok := svc.collections[colName]
+	if !ok {
+		return
+	}
+	aliasPath := dbus.ObjectPath(fmt.Sprintf("/org/freedesktop/secrets/aliases/%s", alias))
+	if err := svc.conn.Export(col, aliasPath, CollectionIface); err != nil {
+		log.Printf("warning: could not export collection at alias path %s: %v", aliasPath, err)
+	}
+	// Also export the Properties interface at the alias path.
+	if err := svc.conn.Export(col, aliasPath, "org.freedesktop.DBus.Properties"); err != nil {
+		log.Printf("warning: could not export properties at alias path %s: %v", aliasPath, err)
+	}
 }
 
 // updateCollectionsProp refreshes the Collections property on the Service object.
@@ -446,6 +475,10 @@ func (svc *Service) SetAlias(name string, collection dbus.ObjectPath) *dbus.Erro
 		if err := svc.store.SetAlias(name, ""); err != nil {
 			return dbusError("org.freedesktop.DBus.Error.Failed", err.Error())
 		}
+		// Unpublish the alias path
+		aliasPath := dbus.ObjectPath(fmt.Sprintf("/org/freedesktop/secrets/aliases/%s", name))
+		_ = svc.conn.Export(nil, aliasPath, CollectionIface)
+		_ = svc.conn.Export(nil, aliasPath, "org.freedesktop.DBus.Properties")
 		return nil
 	}
 	colName := CollectionNameFromPath(collection)
@@ -456,6 +489,8 @@ func (svc *Service) SetAlias(name string, collection dbus.ObjectPath) *dbus.Erro
 	if err := svc.store.SetAlias(name, colName); err != nil {
 		return dbusError("org.freedesktop.DBus.Error.Failed", err.Error())
 	}
+	// Export collection at the alias path
+	svc.exportCollectionAtAlias(name, colName)
 	return nil
 }
 

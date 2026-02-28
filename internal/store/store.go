@@ -325,6 +325,17 @@ func (s *Store) GetAlias(name string) string {
 	return s.data.Aliases[name]
 }
 
+// ListAliases returns a map of all aliases to their collection names.
+func (s *Store) ListAliases() map[string]string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	aliases := make(map[string]string, len(s.data.Aliases))
+	for k, v := range s.data.Aliases {
+		aliases[k] = v
+	}
+	return aliases
+}
+
 // SetAlias maps an alias name to a collection name.
 // Pass collection="" to remove the alias.
 func (s *Store) SetAlias(name, collection string) error {
