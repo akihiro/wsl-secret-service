@@ -3,8 +3,10 @@
 {
 	"name": "Go",
 	// Or use a Dockerfile or Docker Compose file. More info: https://containers.dev/guide/dockerfile
-	"image": "mcr.microsoft.com/devcontainers/go:dev-1.26-trixie"
-
+	//"image": "mcr.microsoft.com/devcontainers/go:dev-1.26-trixie"
+	"build": {
+		"dockerfile": "Dockerfile"
+	},
 	// Features to add to the dev container. More info: https://containers.dev/features.
 	// "features": {},
 
