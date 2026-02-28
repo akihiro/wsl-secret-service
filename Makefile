@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
-.PHONY: build build-linux build-windows test e2e-test e2e-test-verbose e2e-test-debug e2e-clean clean install
+.PHONY: build build-linux build-windows build-mock-helper run-dev test e2e-test e2e-test-verbose e2e-test-debug e2e-clean clean install
 
 # Output directory for compiled binaries.
 BINDIR := bin
@@ -15,6 +15,18 @@ build-linux:
 build-windows:
 	@mkdir -p $(BINDIR)
 	CGO_ENABLED=0 GOOS=windows go build -trimpath -buildmode pie -o $(BINDIR)/wincred-helper.exe ./cmd/wincred-helper
+
+# Build the Linux-native mock wincred helper for development/testing.
+build-mock-helper:
+	@mkdir -p $(BINDIR)
+	CGO_ENABLED=0 GOOS=linux go build -trimpath -o $(BINDIR)/mock-wincred-helper ./cmd/mock-wincred-helper
+
+# Run the daemon locally using the mock helper (no WSL2 required).
+run-dev: build-linux build-mock-helper
+	MOCK_WINCRED_STORE=$(BINDIR)/dev-store.json \
+	$(BINDIR)/wsl-secret-service \
+		--helper-path $(BINDIR)/mock-wincred-helper \
+		--disable-memprotect
 
 test:
 	go test ./...
