@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 .PHONY: build build-linux build-windows build-mock-helper run-dev test e2e-test e2e-test-verbose e2e-test-debug e2e-test-dev e2e-test-dev-verbose e2e-clean clean install
+export GOEXPERIMENT=runtimesecret
 
 # Output directory for compiled binaries.
 BINDIR := bin
