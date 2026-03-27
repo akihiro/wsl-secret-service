@@ -2,7 +2,7 @@ version: 1
 
 goos: windows
 goarch: arm64
-binary: wincred-helper
+binary: wincred-helper-{{ .Os }}-{{ .Arch }}
 main: ./cmd/wincred-helper
 
 env:
