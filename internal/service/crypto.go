@@ -5,6 +5,7 @@ package service
 import (
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
 	"errors"
@@ -46,7 +47,9 @@ func dhGenerateKeyPair() (priv, pub *big.Int, err error) {
 }
 
 // dhDeriveAESKey computes the DH shared secret and derives a 16-byte AES-128 key.
-// sharedSecret = peerPubKey^privKey mod p, then aesKey = SHA256(sharedSecret)[0:16].
+// sharedSecret = peerPubKey^privKey mod p, then aesKey = HKDF-SHA256(sharedSecret)[0:16].
+// Uses HKDF (RFC 5869) with an empty salt (32 zero bytes per spec) and empty info,
+// matching libsecret's egg_hkdf_perform call in _secret_session_open.
 func dhDeriveAESKey(privKey, peerPubKey *big.Int) []byte {
 	shared := new(big.Int).Exp(peerPubKey, privKey, ietf1024Prime)
 
@@ -55,9 +58,17 @@ func dhDeriveAESKey(privKey, peerPubKey *big.Int) []byte {
 	b := shared.Bytes()
 	copy(sharedBytes[dhGroupSize-len(b):], b)
 
-	// AES-128 key = first 16 bytes of SHA-256(sharedSecret).
-	hash := sha256.Sum256(sharedBytes)
-	return hash[:16]
+	// HKDF-Extract: PRK = HMAC-SHA256(salt=zeros[32], IKM=sharedBytes)
+	// Per RFC 5869 §2.2: when salt is not provided, use HashLen zero bytes.
+	salt := make([]byte, sha256.Size)
+	h := hmac.New(sha256.New, salt)
+	h.Write(sharedBytes)
+	prk := h.Sum(nil)
+
+	// HKDF-Expand: T(1) = HMAC-SHA256(PRK, 0x01)  (info="" and L=16 fit in one round)
+	h = hmac.New(sha256.New, prk)
+	h.Write([]byte{0x01})
+	return h.Sum(nil)[:16]
 }
 
 // bigIntToGroupBytes serializes a big.Int to a fixed-size big-endian byte slice padded

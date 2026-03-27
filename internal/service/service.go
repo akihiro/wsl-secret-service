@@ -409,7 +409,7 @@ func (svc *Service) Lock(objects []dbus.ObjectPath) ([]dbus.ObjectPath, dbus.Obj
 func (svc *Service) GetSecrets(
 	items []dbus.ObjectPath,
 	session dbus.ObjectPath,
-) (map[dbus.ObjectPath]dbus.Variant, *dbus.Error) {
+) (map[dbus.ObjectPath]Secret, *dbus.Error) {
 	svc.recordActivity()
 
 	sess, ok := svc.sessions.get(session)
@@ -418,7 +418,7 @@ func (svc *Service) GetSecrets(
 			fmt.Sprintf("session %s is not open", session))
 	}
 
-	result := make(map[dbus.ObjectPath]dbus.Variant, len(items))
+	result := make(map[dbus.ObjectPath]Secret, len(items))
 	for _, itemPath := range items {
 		colName, itemUUID := ItemUUIDFromPath(itemPath)
 		if colName == "" || itemUUID == "" {
@@ -442,13 +442,12 @@ func (svc *Service) GetSecrets(
 			log.Printf("warning: could not encrypt secret for %s: %v", itemPath, err)
 			continue
 		}
-		secret := Secret{
+		result[itemPath] = Secret{
 			Session:     session,
 			Parameters:  params,
 			Value:       value,
 			ContentType: ct,
 		}
-		result[itemPath] = dbus.MakeVariant(secret)
 	}
 	return result, nil
 }

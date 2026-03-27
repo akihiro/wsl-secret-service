@@ -220,11 +220,5 @@ func (svc *Service) exportCollection(col *Collection) error {
 	}
 	col.props = props
 
-	// Explicitly export the standard D-Bus Properties interface for proper introspection.
-	// This ensures clients can discover that the object implements org.freedesktop.DBus.Properties.
-	if err := svc.conn.Export(col, path, "org.freedesktop.DBus.Properties"); err != nil {
-		return fmt.Errorf("export collection properties interface at %s: %w", path, err)
-	}
-
 	return nil
 }

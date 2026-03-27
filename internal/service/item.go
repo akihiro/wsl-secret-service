@@ -52,24 +52,24 @@ func (i *Item) Delete() (dbus.ObjectPath, *dbus.Error) {
 }
 
 // GetSecret implements org.freedesktop.Secret.Item.GetSecret(session).
-func (i *Item) GetSecret(session dbus.ObjectPath) (dbus.Variant, *dbus.Error) {
+func (i *Item) GetSecret(session dbus.ObjectPath) (Secret, *dbus.Error) {
 	i.svc.recordActivity()
 
 	sess, ok := i.svc.sessions.get(session)
 	if !ok {
-		return dbus.Variant{}, dbusError("org.freedesktop.Secret.Error.NoSession",
+		return Secret{}, dbusError("org.freedesktop.Secret.Error.NoSession",
 			fmt.Sprintf("session %s is not open", session))
 	}
 
 	meta, ok := i.svc.store.GetItem(i.collectionName, i.uuid)
 	if !ok {
-		return dbus.Variant{}, dbusError("org.freedesktop.Secret.Error.NoSuchObject",
+		return Secret{}, dbusError("org.freedesktop.Secret.Error.NoSuchObject",
 			fmt.Sprintf("item %s/%s not found", i.collectionName, i.uuid))
 	}
 
 	secretBytes, err := i.svc.backend.Get(i.itemTarget())
 	if err != nil {
-		return dbus.Variant{}, dbusError("org.freedesktop.Secret.Error.IsLocked",
+		return Secret{}, dbusError("org.freedesktop.Secret.Error.IsLocked",
 			fmt.Sprintf("retrieve secret: %v", err))
 	}
 
@@ -80,17 +80,16 @@ func (i *Item) GetSecret(session dbus.ObjectPath) (dbus.Variant, *dbus.Error) {
 
 	params, value, err := sess.encryptSecret(secretBytes)
 	if err != nil {
-		return dbus.Variant{}, dbusError("org.freedesktop.DBus.Error.Failed",
+		return Secret{}, dbusError("org.freedesktop.DBus.Error.Failed",
 			fmt.Sprintf("encrypt secret: %v", err))
 	}
 
-	secret := Secret{
+	return Secret{
 		Session:     session,
 		Parameters:  params,
 		Value:       value,
 		ContentType: ct,
-	}
-	return dbus.MakeVariant(secret), nil
+	}, nil
 }
 
 // SetSecret implements org.freedesktop.Secret.Item.SetSecret(secret).
@@ -200,12 +199,6 @@ func (svc *Service) exportItem(item *Item) error {
 		return fmt.Errorf("export item properties at %s: %w", path, err)
 	}
 	item.props = props
-
-	// Explicitly export the standard D-Bus Properties interface for proper introspection.
-	// This ensures clients can discover that the object implements org.freedesktop.DBus.Properties.
-	if err := svc.conn.Export(item, path, "org.freedesktop.DBus.Properties"); err != nil {
-		return fmt.Errorf("export item properties interface at %s: %w", path, err)
-	}
 
 	return nil
 }
