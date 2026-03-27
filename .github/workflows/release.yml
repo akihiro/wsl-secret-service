@@ -24,3 +24,14 @@ jobs:
       go-version-file: go.mod
       config-file: ${{ matrix.config-file }}
       upload-assets: true
+  sbom:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: anchore/sbom-action@v0
+        with:
+          format: spdx-json
+          upload-release-assets: true
