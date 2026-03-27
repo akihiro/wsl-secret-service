@@ -26,6 +26,43 @@ The daemon runs as a background service in WSL2 and communicates with a companio
 
 ## Installation
 
+### Install from Release (Recommended)
+
+Download pre-built binaries from the [GitHub Releases page](https://github.com/akihiro/wsl-secret-service/releases).
+
+You need two archives:
+- `wsl-secret-service_<version>_linux_amd64.tar.gz` — Linux daemon (or `arm64` for ARM)
+- `wincred-helper_<version>_windows_amd64.zip` — Windows helper (or `arm64` for ARM)
+
+1. Extract and install the binaries:
+   ```bash
+   # Extract the Linux archive
+   tar -xzf wsl-secret-service_<version>_linux_amd64.tar.gz
+   cd wsl-secret-service_<version>_linux_amd64
+
+   # Install binaries
+   mkdir -p ~/.local/bin ~/.local/share/wsl-secret-service
+   cp wsl-secret-service ~/.local/bin/
+
+   # Extract and install the Windows helper
+   unzip ../wincred-helper_<version>_windows_amd64.zip -d wincred-helper
+   cp wincred-helper/wincred-helper.exe ~/.local/share/wsl-secret-service/
+   ```
+
+2. Enable the systemd user service:
+   ```bash
+   mkdir -p ~/.config/systemd/user ~/.local/share/dbus-1/services
+   cp wsl-secret-service.service ~/.config/systemd/user/
+   cp org.freedesktop.secrets.service ~/.local/share/dbus-1/services/
+   systemctl --user daemon-reload
+   systemctl --user enable --now wsl-secret-service
+   ```
+
+3. Verify installation:
+   ```bash
+   systemctl --user status wsl-secret-service
+   ```
+
 ### Build from Source
 
 1. Clone the repository:

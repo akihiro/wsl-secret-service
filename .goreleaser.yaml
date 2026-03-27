@@ -1,0 +1,77 @@
+# SPDX-License-Identifier: Apache-2.0
+version: 2
+
+project_name: wsl-secret-service
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: wsl-secret-service
+    main: ./cmd/wsl-secret-service
+    binary: wsl-secret-service
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    env:
+      - CGO_ENABLED=0
+      - GOEXPERIMENT=runtimesecret
+    flags:
+      - -trimpath
+    buildmode: pie
+
+  - id: wincred-helper
+    main: ./cmd/wincred-helper
+    binary: wincred-helper
+    goos:
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    buildmode: pie
+
+archives:
+  - id: linux
+    ids:
+      - wsl-secret-service
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    formats:
+      - tar.gz
+    wrap_in_directory: true
+    files:
+      - LICENSE
+      - README.md
+      - wsl-secret-service.service
+      - org.freedesktop.secrets.service
+
+  - id: windows
+    ids:
+      - wincred-helper
+    name_template: "wincred-helper_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    formats:
+      - zip
+    wrap_in_directory: false
+    files:
+      - LICENSE
+
+sboms:
+  - artifacts: archive
+
+checksum:
+  name_template: "checksums.txt"
+  algorithm: sha256
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
