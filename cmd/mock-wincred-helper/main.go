@@ -4,25 +4,38 @@
 
 // mock-wincred-helper is a Linux-native stand-in for wincred-helper.exe used
 // during development and testing in non-WSL2 environments. It stores secrets as
-// a JSON map in a file specified by the MOCK_WINCRED_STORE environment variable
-// (default: /tmp/mock-wincred-store.json).
+// a JSON Lines log in a file specified by the MOCK_WINCRED_STORE environment
+// variable (default: /tmp/mock-wincred-store.jsonl).
+//
+// Each operation is appended as a new JSON Line with the following structure:
+// - timestamp: ISO8601 UTC timestamp of the operation
+// - action: "get", "set", "delete", or "list"
+// - target/filter: The credential identifier or filter pattern
+// - success: Whether the operation succeeded
+// - error: Error message if unsuccessful
+// - result: For "get" operations, the retrieved secret value
+// - state: The complete credential store state after the operation
+//
+// This format enables easy debugging and audit trails of all operations.
 //
 // Protocol: identical to wincred-helper.exe — reads one JSON request line from
 // stdin, writes one JSON response line to stdout, then exits.
 //
 // Usage:
 //
-//	MOCK_WINCRED_STORE=/path/to/store.json ./bin/wsl-secret-service \
+//	MOCK_WINCRED_STORE=/path/to/store.jsonl ./bin/wsl-secret-service \
 //	    --helper-path ./bin/mock-wincred-helper \
 //	    --disable-memprotect
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/akihiro/wsl-secret-service/internal/ipc"
 )
@@ -31,63 +44,118 @@ func storePath() string {
 	if p := os.Getenv("MOCK_WINCRED_STORE"); p != "" {
 		return p
 	}
-	return "/tmp/mock-wincred-store.json"
+	return "/tmp/mock-wincred-store.jsonl"
+}
+
+// LogEntry represents a single operation in the JSON Lines log
+type LogEntry struct {
+	Timestamp string            `json:"timestamp"`
+	Action    string            `json:"action"`
+	Target    string            `json:"target,omitempty"`
+	Filter    string            `json:"filter,omitempty"`
+	Secret    string            `json:"secret,omitempty"`
+	Success   bool              `json:"success"`
+	Error     string            `json:"error,omitempty"`
+	Result    string            `json:"result,omitempty"`
+	State     map[string]string `json:"state"`
 }
 
 func loadStore(f *os.File) (map[string]string, error) {
 	store := make(map[string]string)
-	info, err := f.Stat()
-	if err != nil {
+	if _, err := f.Seek(0, 0); err != nil {
 		return nil, err
 	}
-	if info.Size() == 0 {
-		return store, nil
+
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		var entry LogEntry
+		if err := json.Unmarshal(scanner.Bytes(), &entry); err != nil {
+			// Skip invalid lines
+			continue
+		}
+		// Reconstruct state from the last entry with a valid state
+		if entry.State != nil {
+			store = entry.State
+		}
 	}
-	if err := json.NewDecoder(f).Decode(&store); err != nil {
-		return nil, fmt.Errorf("decode store: %w", err)
-	}
-	return store, nil
+
+	return store, scanner.Err()
 }
 
-func saveStore(f *os.File, store map[string]string) error {
-	if err := f.Truncate(0); err != nil {
-		return err
-	}
-	if _, err := f.Seek(0, 0); err != nil {
-		return err
-	}
-	return json.NewEncoder(f).Encode(store)
+func appendLog(f *os.File, entry LogEntry) error {
+	encoder := json.NewEncoder(f)
+	return encoder.Encode(entry)
 }
 
-func handleGet(store map[string]string, target string) ipc.Response {
+func handleGet(store map[string]string, target string) (ipc.Response, *LogEntry) {
 	v, ok := store[target]
 	if !ok {
-		return ipc.Response{OK: false, Error: "credential not found"}
+		return ipc.Response{OK: false, Error: "credential not found"}, &LogEntry{
+			Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
+			Action:    "get",
+			Target:    target,
+			Success:   false,
+			Error:     "credential not found",
+			State:     store,
+		}
 	}
-	return ipc.Response{OK: true, Secret: v}
+	return ipc.Response{OK: true, Secret: v}, &LogEntry{
+		Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
+		Action:    "get",
+		Target:    target,
+		Success:   true,
+		Result:    v,
+		State:     store,
+	}
 }
 
-func handleSet(store map[string]string, target, secret string) ipc.Response {
+func handleSet(store map[string]string, target, secret string) (ipc.Response, *LogEntry) {
 	store[target] = secret
-	return ipc.Response{OK: true}
+	return ipc.Response{OK: true}, &LogEntry{
+		Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
+		Action:    "set",
+		Target:    target,
+		Secret:    secret,
+		Success:   true,
+		State:     store,
+	}
 }
 
-func handleDelete(store map[string]string, target string) ipc.Response {
+func handleDelete(store map[string]string, target string) (ipc.Response, *LogEntry) {
 	if _, ok := store[target]; !ok {
-		return ipc.Response{OK: false, Error: "credential not found"}
+		return ipc.Response{OK: false, Error: "credential not found"}, &LogEntry{
+			Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
+			Action:    "delete",
+			Target:    target,
+			Success:   false,
+			Error:     "credential not found",
+			State:     store,
+		}
 	}
 	delete(store, target)
-	return ipc.Response{OK: true}
+	return ipc.Response{OK: true}, &LogEntry{
+		Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
+		Action:    "delete",
+		Target:    target,
+		Success:   true,
+		State:     store,
+	}
 }
 
-func handleList(store map[string]string, filter string) ipc.Response {
+func handleList(store map[string]string, filter string) (ipc.Response, *LogEntry) {
 	targets := []string{}
 	for k := range store {
 		if strings.HasPrefix(k, filter) {
 			targets = append(targets, k)
 		}
 	}
-	return ipc.Response{OK: true, Targets: targets}
+	return ipc.Response{OK: true, Targets: targets}, &LogEntry{
+		Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
+		Action:    "list",
+		Filter:    filter,
+		Success:   true,
+		State:     store,
+	}
 }
 
 func writeResponse(r ipc.Response) {
@@ -121,30 +189,36 @@ func main() {
 	}
 
 	var resp ipc.Response
-	var mutated bool
+	var logEntry *LogEntry
 
 	switch req.Action {
 	case "get":
-		resp = handleGet(store, req.Target)
+		resp, logEntry = handleGet(store, req.Target)
 	case "set":
-		resp = handleSet(store, req.Target, req.Secret)
-		mutated = true
+		resp, logEntry = handleSet(store, req.Target, req.Secret)
 	case "delete":
-		resp = handleDelete(store, req.Target)
-		if resp.OK {
-			mutated = true
-		}
+		resp, logEntry = handleDelete(store, req.Target)
 	case "list":
-		resp = handleList(store, req.Filter)
+		resp, logEntry = handleList(store, req.Filter)
 	default:
-		resp = ipc.Response{OK: false, Error: fmt.Sprintf("unknown action: %q", req.Action)}
+		logEntry = &LogEntry{
+			Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
+			Action:    req.Action,
+			Success:   false,
+			Error:     fmt.Sprintf("unknown action: %q", req.Action),
+			State:     store,
+		}
+		resp = ipc.Response{OK: false, Error: logEntry.Error}
 	}
 
-	if mutated && resp.OK {
-		if err := saveStore(f, store); err != nil {
-			writeResponse(ipc.Response{OK: false, Error: fmt.Sprintf("save store: %v", err)})
-			os.Exit(1)
-		}
+	// Append log entry
+	if _, err := f.Seek(0, 2); err != nil { // Seek to end
+		writeResponse(ipc.Response{OK: false, Error: fmt.Sprintf("seek store: %v", err)})
+		os.Exit(1)
+	}
+	if err := appendLog(f, *logEntry); err != nil {
+		writeResponse(ipc.Response{OK: false, Error: fmt.Sprintf("write log: %v", err)})
+		os.Exit(1)
 	}
 
 	writeResponse(resp)
