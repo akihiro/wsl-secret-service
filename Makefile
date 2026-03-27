@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
-.PHONY: build build-linux build-windows build-mock-helper run-dev test e2e-test e2e-test-verbose e2e-test-debug e2e-test-dev e2e-test-dev-verbose e2e-clean clean install
+.PHONY: build build-linux build-windows build-mock-helper run-dev test e2e-test e2e-test-verbose e2e-test-debug e2e-test-dev e2e-test-dev-verbose e2e-test-wincred e2e-test-wincred-verbose e2e-clean clean install
 export GOEXPERIMENT=runtimesecret
 
 # Output directory for compiled binaries.
@@ -42,15 +42,23 @@ test:
 
 # End-to-end tests using secret-tool
 e2e-test: build
-	@bash tests/e2e/run-tests.sh
+	@DAEMON_BIN=$(BINDIR)/wsl-secret-service TEST_DATA_DIR=$(BINDIR) bash tests/e2e/run-tests.sh
 
 # Verbose E2E tests
 e2e-test-verbose: build
-	@bash tests/e2e/run-tests.sh -v
+	@DAEMON_BIN=$(BINDIR)/wsl-secret-service TEST_DATA_DIR=$(BINDIR) bash tests/e2e/run-tests.sh -v
 
 # Debug E2E tests (show each command)
 e2e-test-debug: build
-	@bash -x tests/e2e/run-tests.sh -v
+	@DAEMON_BIN=$(BINDIR)/wsl-secret-service TEST_DATA_DIR=$(BINDIR) bash -x tests/e2e/run-tests.sh -v
+
+# Direct wincred-helper tests (no daemon needed, uses IPC directly)
+e2e-test-wincred: build-windows
+	@bash tests/e2e/run-tests-wincred.sh
+
+# Verbose wincred-helper tests
+e2e-test-wincred-verbose: build-windows
+	@bash tests/e2e/run-tests-wincred.sh -v
 
 # Clean E2E test environment
 e2e-clean:
