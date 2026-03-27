@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: Apache-2.0
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    permissions:
+      id-token: write   # For keyless signing of SLSA provenance
+      contents: write   # For uploading release assets
+      actions: read     # For detecting the workflow path
+    strategy:
+      matrix:
+        config-file:
+          - .slsa-goreleaser/wsl-secret-service-linux-amd64.yml
+          - .slsa-goreleaser/wsl-secret-service-linux-arm64.yml
+          - .slsa-goreleaser/wincred-helper-windows-amd64.yml
+          - .slsa-goreleaser/wincred-helper-windows-arm64.yml
+    uses: slsa-framework/slsa-github-generator/.github/workflows/builder_go_slsa3.yml@v2.1.0
+    with:
+      go-version-file: go.mod
+      config-file: ${{ matrix.config-file }}
+      upload-assets: true

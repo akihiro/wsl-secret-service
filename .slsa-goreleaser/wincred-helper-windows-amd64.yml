@@ -1,0 +1,13 @@
+version: 1
+
+goos: windows
+goarch: amd64
+binary: wincred-helper
+main: ./cmd/wincred-helper
+
+env:
+  - CGO_ENABLED=0
+
+flags:
+  - -trimpath
+  - -buildmode=pie
