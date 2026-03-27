@@ -11,3 +11,7 @@ env:
 flags:
   - -trimpath
   - -buildmode=pie
+
+sboms:
+  - documents:
+      - "{{ .Binary }}.sbom.json"
