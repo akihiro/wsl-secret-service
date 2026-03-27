@@ -16,6 +16,8 @@
       "matchCommandLine": true
     },
     "go": true,
-    "make": true
+    "make": true,
+    "git add": true,
+    "git commit": true
   }
 }
