@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: Apache-2.0
+version: "2"
+
+linters:
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - gosec
+  settings:
+    gosec:
+      excludes:
+        # IPC messages intentionally marshal fields named "secret" — not a leak.
+        - G117
+        # Integer conversions are safe in context (Unix timestamps, AES padding, file descriptors).
+        - G115
+        # Helper path is user-supplied by design (--helper-path flag or known install paths).
+        - G703
+        # Subprocess launch with configurable helper path is intentional by design.
+        - G204
