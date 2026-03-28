@@ -165,6 +165,28 @@ wsl-secret-service --helper-path /path/to/wincred-helper.exe
 
 Also verify that WSL interop is enabled in Windows (`wsl.exe --status`).
 
+### `mlockall failed (secrets may reach swap)`
+
+This warning means the daemon could not lock its memory pages in RAM, so secret material could potentially be written to swap in plaintext.
+
+The most common cause on WSL2 is a low `RLIMIT_MEMLOCK` hard limit. The systemd unit already sets `LimitMEMLOCK=infinity`, so reloading and restarting the service is usually sufficient:
+
+```bash
+systemctl --user daemon-reload
+systemctl --user restart wsl-secret-service
+```
+
+If the warning persists, the hard limit may be too low for systemd to override. Fix it at the system level by creating a limits file:
+
+```bash
+sudo tee /etc/security/limits.d/mlock.conf <<'EOF'
+*  soft  memlock  unlimited
+*  hard  memlock  unlimited
+EOF
+```
+
+Then log out and back in (or reboot), and restart the service.
+
 ### D-Bus Connection Issues
 
 If `DBUS_SESSION_BUS_ADDRESS` is not set, the systemd user instance may not be running. Check its status and start it if needed:
