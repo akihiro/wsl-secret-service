@@ -30,26 +30,59 @@ The daemon runs as a background service in WSL2 and communicates with a companio
 
 Download pre-built binaries from the [GitHub Releases page](https://github.com/akihiro/wsl-secret-service/releases).
 
-You need two archives:
-- `wsl-secret-service_<version>_linux_amd64.tar.gz` — Linux daemon (or `arm64` for ARM)
-- `wincred-helper_<version>_windows_amd64.zip` — Windows helper (or `arm64` for ARM)
+The following files are available for your architecture (`amd64` or `arm64`):
+- `wsl-secret-service-linux-<arch>` — Linux daemon
+- `wincred-helper-windows-<arch>.exe` — Windows helper
+- `wsl-secret-service-linux-<arch>.intoto.jsonl` — SLSA provenance for the daemon
+- `wincred-helper-windows-<arch>.intoto.jsonl` — SLSA provenance for the helper
 
-1. Extract and install the binaries:
+#### Verify (Recommended)
+
+Binaries are built with [SLSA Level 3](https://slsa.dev/) and signed via keyless signing (Sigstore/Fulcio). You can verify them before installing.
+
+Using [slsa-verifier](https://github.com/slsa-framework/slsa-verifier):
+```bash
+VERSION=v<version>
+ARCH=amd64  # or arm64
+
+slsa-verifier verify-artifact \
+  wsl-secret-service-linux-${ARCH} \
+  --provenance-path wsl-secret-service-linux-${ARCH}.intoto.jsonl \
+  --source-uri github.com/akihiro/wsl-secret-service \
+  --source-tag ${VERSION}
+```
+
+Using [cosign](https://github.com/sigstore/cosign):
+```bash
+ARCH=amd64  # or arm64
+
+cosign verify-blob \
+  --bundle wsl-secret-service-linux-${ARCH}.intoto.jsonl \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  --certificate-identity-regexp "https://github.com/slsa-framework/slsa-github-generator/.github/workflows/builder_go_slsa3.yml@refs/tags/" \
+  wsl-secret-service-linux-${ARCH}
+```
+
+#### Install
+
+1. Install the binaries:
    ```bash
-   # Extract the Linux archive
-   tar -xzf wsl-secret-service_<version>_linux_amd64.tar.gz
-   cd wsl-secret-service_<version>_linux_amd64
+   ARCH=amd64  # or arm64
 
-   # Install binaries
-   mkdir -p ~/.local/bin ~/.local/share/wsl-secret-service
-   cp wsl-secret-service ~/.local/bin/
+   install -Dm755 wsl-secret-service-linux-${ARCH} ~/.local/bin/wsl-secret-service
 
-   # Extract and install the Windows helper
-   unzip ../wincred-helper_<version>_windows_amd64.zip -d wincred-helper
-   cp wincred-helper/wincred-helper.exe ~/.local/share/wsl-secret-service/
+   mkdir -p ~/.local/share/wsl-secret-service
+   cp wincred-helper-windows-${ARCH}.exe ~/.local/share/wsl-secret-service/wincred-helper.exe
    ```
 
-2. Enable the systemd user service:
+2. Download the service files from the repository:
+   ```bash
+   VERSION=v<version>
+   curl -LO "https://github.com/akihiro/wsl-secret-service/raw/${VERSION}/wsl-secret-service.service"
+   curl -LO "https://github.com/akihiro/wsl-secret-service/raw/${VERSION}/org.freedesktop.secrets.service"
+   ```
+
+3. Enable the systemd user service:
    ```bash
    mkdir -p ~/.config/systemd/user ~/.local/share/dbus-1/services
    cp wsl-secret-service.service ~/.config/systemd/user/
@@ -58,7 +91,7 @@ You need two archives:
    systemctl --user enable --now wsl-secret-service
    ```
 
-3. Verify installation:
+4. Verify installation:
    ```bash
    systemctl --user status wsl-secret-service
    ```
