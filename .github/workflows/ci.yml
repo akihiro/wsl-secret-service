@@ -1,0 +1,80 @@
+# SPDX-License-Identifier: Apache-2.0
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  test:
+    name: Unit tests & vet
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: go vet
+        run: go vet ./...
+        env:
+          GOEXPERIMENT: runtimesecret
+      - name: go test
+        run: go test ./...
+        env:
+          GOEXPERIMENT: runtimesecret
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Build Linux daemon
+        run: make build-linux
+      - name: Build Windows helper
+        run: make build-windows
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+        env:
+          GOEXPERIMENT: runtimesecret
+
+  mod-tidy:
+    name: go mod tidy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Check go mod tidy
+        run: |
+          go mod tidy
+          git diff --exit-code go.mod go.sum
+        env:
+          GOEXPERIMENT: runtimesecret
+
+  e2e:
+    name: E2E tests (mock)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends dbus-test-runner dbus-bin libsecret-tools libsecret-1-dev
+      - name: Run E2E tests (dev/mock mode)
+        run: make e2e-test-dev
