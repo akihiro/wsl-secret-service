@@ -174,7 +174,7 @@ func main() {
 		writeResponse(ipc.Response{OK: false, Error: fmt.Sprintf("open store: %v", err)})
 		os.Exit(1)
 	}
-	defer f.Close()
+	defer f.Close() //nolint:errcheck
 
 	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
 		writeResponse(ipc.Response{OK: false, Error: fmt.Sprintf("lock store: %v", err)})
