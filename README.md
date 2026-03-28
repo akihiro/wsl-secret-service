@@ -16,13 +16,10 @@ A Freedesktop.org Secret Service daemon for WSL2 that bridges Linux applications
 ## Prerequisites
 
 - **WSL2 Environment**: Must be running on Windows Subsystem for Linux 2
-- **Go 1.26.0**: Required for building from source
 - **D-Bus Session Bus**: Available in WSL2 (typically via systemd user instance)
 - **Systemd User Services**: For automatic service management
 
 ## Installation
-
-### Install from Release (Recommended)
 
 Download pre-built binaries from the [GitHub Releases page](https://github.com/akihiro/wsl-secret-service/releases).
 
@@ -32,7 +29,7 @@ The following files are available for your architecture (`amd64` or `arm64`):
 - `wsl-secret-service-linux-<arch>.intoto.jsonl` — SLSA provenance for the daemon
 - `wincred-helper-windows-<arch>.intoto.jsonl` — SLSA provenance for the helper
 
-#### Verify (Recommended)
+### Verify (Recommended)
 
 Binaries are built with [SLSA Level 3](https://slsa.dev/) and signed via keyless signing (Sigstore/Fulcio). You can verify them before installing.
 
@@ -59,7 +56,7 @@ cosign verify-blob \
   wsl-secret-service-linux-${ARCH}
 ```
 
-#### Install Binaries
+### Install Binaries
 
 ```bash
 ARCH=amd64  # or arm64
@@ -70,7 +67,7 @@ mkdir -p ~/.local/share/wsl-secret-service
 cp wincred-helper-windows-${ARCH}.exe ~/.local/share/wsl-secret-service/wincred-helper.exe
 ```
 
-Then download the service files and proceed to [Enable Systemd Service](#enable-systemd-service) below.
+Then download the service files:
 
 ```bash
 VERSION=v<version>
@@ -78,31 +75,7 @@ curl -LO "https://github.com/akihiro/wsl-secret-service/raw/${VERSION}/wsl-secre
 curl -LO "https://github.com/akihiro/wsl-secret-service/raw/${VERSION}/org.freedesktop.secrets.service"
 ```
 
-### Build from Source
-
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/akihiro/wsl-secret-service.git
-   cd wsl-secret-service
-   ```
-
-2. Build the binaries:
-   ```bash
-   make build
-   ```
-   This creates `bin/wsl-secret-service` (Linux daemon) and `bin/wincred-helper.exe` (Windows helper).
-
-3. Install the binaries:
-   ```bash
-   make install
-   ```
-   This copies the daemon to `~/.local/bin/` and the helper to `~/.local/share/wsl-secret-service/`.
-
-Then proceed to [Enable Systemd Service](#enable-systemd-service) below.
-
 ### Enable Systemd Service
-
-Once the binaries are in place, register and start the service:
 
 ```bash
 mkdir -p ~/.config/systemd/user ~/.local/share/dbus-1/services
@@ -110,12 +83,6 @@ cp wsl-secret-service.service ~/.config/systemd/user/
 cp org.freedesktop.secrets.service ~/.local/share/dbus-1/services/
 systemctl --user daemon-reload
 systemctl --user enable --now wsl-secret-service
-```
-
-Verify the service is running:
-
-```bash
-systemctl --user status wsl-secret-service
 ```
 
 ### Verify Installation
@@ -180,57 +147,6 @@ When `--helper-path` is not specified, the daemon searches these locations in or
 3. `~/.local/share/wsl-secret-service/wincred-helper.exe`
 4. `PATH` (includes Windows paths via WSL2 interop)
 
-## Development
-
-### Running Without WSL2
-
-A Linux-native mock helper is provided for development and testing on any Linux machine (no WSL2 or Windows required):
-
-```bash
-# Build and run the daemon with the mock helper
-make run-dev
-```
-
-This stores secrets in `bin/dev-store.jsonl` instead of Windows Credential Manager.
-
-## Testing
-
-### Unit and Integration Tests
-
-```bash
-make test
-```
-
-This runs `go test ./...` across all packages.
-
-### End-to-End Tests
-
-E2E tests verify the full D-Bus API surface. See [docs/e2e-testing.md](docs/e2e-testing.md) for full details.
-
-**Without WSL2** (uses mock helper):
-
-```bash
-make e2e-test-dev          # standard
-make e2e-test-dev-verbose  # verbose
-```
-
-**With WSL2** (requires `secret-tool` from `libsecret-tools`):
-
-```bash
-# Install test dependencies
-sudo apt-get install -y libsecret-tools dbus-tools jq
-
-make e2e-test          # standard
-make e2e-test-verbose  # verbose
-make e2e-test-debug    # show all commands
-make e2e-clean         # clean up test environment
-```
-
-E2E tests cover:
-- Collection management (create, list, delete)
-- Secret storage and retrieval with encryption
-- Attribute-based search functionality
-
 ## Troubleshooting
 
 ### Service Won't Start
@@ -264,11 +180,6 @@ Then restart the service:
 systemctl --user restart wsl-secret-service
 ```
 
-### Build Issues
-
-- Ensure Go 1.26.0 is installed
-- Run `go mod tidy` to resolve dependencies
-
 ## License
 
 Licensed under the Apache License 2.0. See [LICENSE](LICENSE) for details.
@@ -277,3 +188,4 @@ Licensed under the Apache License 2.0. See [LICENSE](LICENSE) for details.
 
 - [Freedesktop.org Secret Service Specification](https://specifications.freedesktop.org/secret-service/0.2/)
 - [WSL Documentation](https://learn.microsoft.com/en-us/windows/wsl/)
+- [Development Guide](docs/development.md)
