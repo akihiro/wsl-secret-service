@@ -43,7 +43,7 @@ type Service struct {
 //
 // The caller is responsible for requesting the well-known bus name before
 // calling New, or passing replaceExisting=true to RequestName.
-func New(ctx context.Context, conn *dbus.Conn, st *store.Store, be backend.Backend, timeoutDuration time.Duration) (*Service, error) {
+func New(ctx context.Context, cancel context.CancelFunc, conn *dbus.Conn, st *store.Store, be backend.Backend, timeoutDuration time.Duration) (*Service, error) {
 	svc := &Service{
 		conn:                  conn,
 		store:                 st,
@@ -52,13 +52,8 @@ func New(ctx context.Context, conn *dbus.Conn, st *store.Store, be backend.Backe
 		collections:           make(map[string]*Collection),
 		lastActivityTimestamp: atomic.Int64{},
 		timeoutDuration:       int64(timeoutDuration.Seconds()),
-		shutdownFn:            nil, // will be set from context
+		shutdownFn:            cancel,
 	}
-
-	// Extract cancel function from context (will be used by timeout monitor)
-	// We need a context with cancel, so create one if background context is passed
-	ctxWithCancel, cancel := context.WithCancel(ctx)
-	svc.shutdownFn = cancel
 
 	// Initialize activity timestamp to current time
 	svc.lastActivityTimestamp.Store(time.Now().Unix())
@@ -94,7 +89,7 @@ func New(ctx context.Context, conn *dbus.Conn, st *store.Store, be backend.Backe
 	go svc.watchNameOwnerChanged()
 
 	// Start the idle timeout monitor.
-	svc.startTimeoutMonitor(ctxWithCancel)
+	svc.startTimeoutMonitor(ctx)
 
 	return svc, nil
 }
