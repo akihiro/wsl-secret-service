@@ -2,11 +2,7 @@
 
 A Freedesktop.org Secret Service daemon for WSL2 that bridges Linux applications and Windows credential storage.
 
-## Description
-
-`wsl-secret-service` provides a secure way for applications running in WSL2 (Windows Subsystem for Linux 2) to store and retrieve sensitive information like passwords, API keys, and certificates. It implements the standard `org.freedesktop.secrets` D-Bus interface, allowing Linux apps to interact with secrets seamlessly, while storing the actual secret data in the Windows Credential Manager for better integration with the host system.
-
-The daemon runs as a background service in WSL2 and communicates with a companion Windows executable (`wincred-helper.exe`) to access Windows credentials securely.
+`wsl-secret-service` implements the standard `org.freedesktop.secrets` D-Bus interface, allowing Linux apps to store and retrieve secrets seamlessly while persisting the actual data in the Windows Credential Manager. The daemon runs as a systemd user service and communicates with a companion Windows executable (`wincred-helper.exe`) via WSL2 interop.
 
 ## Features
 
@@ -20,13 +16,10 @@ The daemon runs as a background service in WSL2 and communicates with a companio
 ## Prerequisites
 
 - **WSL2 Environment**: Must be running on Windows Subsystem for Linux 2
-- **Go 1.26.0**: Required for building from source
 - **D-Bus Session Bus**: Available in WSL2 (typically via systemd user instance)
 - **Systemd User Services**: For automatic service management
 
 ## Installation
-
-### Install from Release (Recommended)
 
 Download pre-built binaries from the [GitHub Releases page](https://github.com/akihiro/wsl-secret-service/releases).
 
@@ -36,7 +29,7 @@ The following files are available for your architecture (`amd64` or `arm64`):
 - `wsl-secret-service-linux-<arch>.intoto.jsonl` — SLSA provenance for the daemon
 - `wincred-helper-windows-<arch>.intoto.jsonl` — SLSA provenance for the helper
 
-#### Verify (Recommended)
+### Verify (Recommended)
 
 Binaries are built with [SLSA Level 3](https://slsa.dev/) and signed via keyless signing (Sigstore/Fulcio). You can verify them before installing.
 
@@ -63,95 +56,53 @@ cosign verify-blob \
   wsl-secret-service-linux-${ARCH}
 ```
 
-#### Install
+### Install Binaries
 
-1. Install the binaries:
-   ```bash
-   ARCH=amd64  # or arm64
+```bash
+ARCH=amd64  # or arm64
 
-   install -Dm755 wsl-secret-service-linux-${ARCH} ~/.local/bin/wsl-secret-service
+install -Dm755 wsl-secret-service-linux-${ARCH} ~/.local/bin/wsl-secret-service
 
-   mkdir -p ~/.local/share/wsl-secret-service
-   cp wincred-helper-windows-${ARCH}.exe ~/.local/share/wsl-secret-service/wincred-helper.exe
-   ```
+mkdir -p ~/.local/share/wsl-secret-service
+cp wincred-helper-windows-${ARCH}.exe ~/.local/share/wsl-secret-service/wincred-helper.exe
+```
 
-2. Download the service files from the repository:
-   ```bash
-   VERSION=v<version>
-   curl -LO "https://github.com/akihiro/wsl-secret-service/raw/${VERSION}/wsl-secret-service.service"
-   curl -LO "https://github.com/akihiro/wsl-secret-service/raw/${VERSION}/org.freedesktop.secrets.service"
-   ```
+Then download the service files:
 
-3. Enable the systemd user service:
-   ```bash
-   mkdir -p ~/.config/systemd/user ~/.local/share/dbus-1/services
-   cp wsl-secret-service.service ~/.config/systemd/user/
-   cp org.freedesktop.secrets.service ~/.local/share/dbus-1/services/
-   systemctl --user daemon-reload
-   systemctl --user enable --now wsl-secret-service
-   ```
+```bash
+VERSION=v<version>
+curl -LO "https://github.com/akihiro/wsl-secret-service/raw/${VERSION}/wsl-secret-service.service"
+curl -LO "https://github.com/akihiro/wsl-secret-service/raw/${VERSION}/org.freedesktop.secrets.service"
+```
 
-4. Verify installation:
-   ```bash
-   systemctl --user status wsl-secret-service
-   ```
+### Enable Systemd Service
 
-### Build from Source
+```bash
+mkdir -p ~/.config/systemd/user ~/.local/share/dbus-1/services
+cp wsl-secret-service.service ~/.config/systemd/user/
+cp org.freedesktop.secrets.service ~/.local/share/dbus-1/services/
+systemctl --user daemon-reload
+systemctl --user enable --now wsl-secret-service
+```
 
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/akihiro/wsl-secret-service.git
-   cd wsl-secret-service
-   ```
+### Verify Installation
 
-2. Build the binaries:
-   ```bash
-   make build
-   ```
-   This creates `bin/wsl-secret-service` (Linux daemon) and `bin/wincred-helper.exe` (Windows helper).
+Confirm the service is reachable over D-Bus:
 
-### Install
+```bash
+# Install libsecret-tools if not already present
+sudo apt-get install -y libsecret-tools
 
-1. Install the binaries:
-   ```bash
-   make install
-   ```
-   This copies the daemon to `~/.local/bin/` and the helper to `~/.local/share/wsl-secret-service/`.
+# Store a test secret
+secret-tool store --label="test" mykey myvalue
 
-2. Enable the systemd user service:
-   ```bash
-   mkdir -p ~/.config/systemd/user ~/.local/share/dbus-1/services
-   cp wsl-secret-service.service ~/.config/systemd/user/
-   cp org.freedesktop.secrets.service ~/.local/share/dbus-1/services/
-   systemctl --user daemon-reload
-   systemctl --user enable --now wsl-secret-service
-   ```
-
-3. Verify installation:
-   ```bash
-   systemctl --user status wsl-secret-service
-   ```
-
-The service should now be running and available via D-Bus.
+# Retrieve it
+secret-tool lookup mykey myvalue
+```
 
 ## Usage
 
-Once installed and running, applications can automatically discover and use the secret service through the standard D-Bus interface. No manual configuration is typically required.
-
-### For Application Developers
-
-Applications can interact with the service using D-Bus calls to `org.freedesktop.secrets`. Common operations include:
-
-- **Store a secret**: Create items in collections with attributes for easy lookup
-- **Retrieve secrets**: Search by attributes and unlock items
-- **Manage collections**: Create, delete, and list secret collections
-
-### Example Use Cases
-
-- Password managers storing credentials
-- Applications caching API tokens
-- Browsers managing saved passwords
-- Development tools storing access keys
+Once installed and running, applications automatically discover the secret service through the standard D-Bus interface (`org.freedesktop.secrets`). No manual configuration is typically required.
 
 ### Checking Service Status
 
@@ -163,81 +114,71 @@ systemctl --user status wsl-secret-service
 journalctl --user -u wsl-secret-service
 ```
 
+### Example Use Cases
+
+- Password managers storing credentials
+- Applications caching API tokens
+- Browsers managing saved passwords
+- Development tools storing access keys
+
 ## Configuration
 
-The daemon can be configured via command-line flags when started manually:
+The daemon accepts the following command-line flags:
 
-- `--config-dir <path>`: Directory for metadata storage (default: `~/.config/wsl-secret-service`)
-- `--helper-path <path>`: Path to `wincred-helper.exe` (default: auto-discovered)
-- `--replace`: Replace existing D-Bus name owner
-- `--disable-memprotect`: Disable memory protection (debugging only)
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--config-dir <path>` | `$XDG_CONFIG_HOME/wsl-secret-service` | Directory for metadata storage |
+| `--helper-path <path>` | auto-discovered | Path to `wincred-helper.exe` |
+| `--replace` | false | Replace existing D-Bus name owner |
+| `--disable-memprotect` | false | Disable memory protection (debugging only) |
 
-For systemd-managed service, modify the service file or use environment variables.
+For the systemd-managed service, override flags via `ExecStart` in a drop-in file:
+
+```bash
+systemctl --user edit wsl-secret-service
+```
+
+### wincred-helper.exe Auto-Discovery
+
+When `--helper-path` is not specified, the daemon searches these locations in order:
+
+1. Same directory as the `wsl-secret-service` binary
+2. `$XDG_DATA_HOME/wsl-secret-service/wincred-helper.exe`
+3. `~/.local/share/wsl-secret-service/wincred-helper.exe`
+4. `PATH` (includes Windows paths via WSL2 interop)
 
 ## Troubleshooting
 
 ### Service Won't Start
 
-- Ensure D-Bus is running: Check `DBUS_SESSION_BUS_ADDRESS` environment variable
-- Verify systemd user instance: `systemctl --user list-units`
+- Verify the systemd user instance is running: `systemctl --user list-units`
+- Check that `DBUS_SESSION_BUS_ADDRESS` is set: `echo $DBUS_SESSION_BUS_ADDRESS`
 - Check logs: `journalctl --user -u wsl-secret-service`
 
 ### Helper Not Found
 
-- Ensure `wincred-helper.exe` is built and accessible
-- Check auto-discovery paths or specify `--helper-path`
-- Verify WSL interop is enabled in Windows
+The daemon searches for `wincred-helper.exe` in the locations listed under [wincred-helper.exe Auto-Discovery](#wincred-helperexe-auto-discovery). If it is not found there, specify the path explicitly:
+
+```bash
+wsl-secret-service --helper-path /path/to/wincred-helper.exe
+```
+
+Also verify that WSL interop is enabled in Windows (`wsl.exe --status`).
 
 ### D-Bus Connection Issues
 
-- Run `export $(dbus-launch)` if `DBUS_SESSION_BUS_ADDRESS` is not set
-- Restart the service: `systemctl --user restart wsl-secret-service`
-
-### Build Issues
-
-- Ensure Go 1.26.0 is installed
-- Run `go mod tidy` to resolve dependencies
-- Check for CGO requirements (disabled for static builds)
-
-## Testing
-
-### Unit and Integration Tests
-
-Run the standard test suite:
+If `DBUS_SESSION_BUS_ADDRESS` is not set, the systemd user instance may not be running. Check its status and start it if needed:
 
 ```bash
-make test
+systemctl --user status
+systemctl --user start dbus
 ```
 
-This runs Go unit tests for the `store` and `wincred` packages.
-
-### End-to-End Tests
-
-E2E tests verify the full D-Bus API surface using `secret-tool` (from `libsecret-tools`). See [docs/e2e-testing.md](docs/e2e-testing.md) for full details.
-
-**Quick Start**:
+Then restart the service:
 
 ```bash
-# Install test dependencies
-sudo apt-get install -y libsecret-tools dbus-tools jq
-
-# Run E2E tests
-make e2e-test
-
-# Verbose mode
-make e2e-test-verbose
-
-# Debug mode (show all commands)
-make e2e-test-debug
-
-# Clean up test environment
-make e2e-clean
+systemctl --user restart wsl-secret-service
 ```
-
-E2E tests cover:
-- Collection management (create, list, delete)
-- Secret storage and retrieval with encryption
-- Attribute-based search functionality
 
 ## License
 
@@ -246,4 +187,5 @@ Licensed under the Apache License 2.0. See [LICENSE](LICENSE) for details.
 ## Links
 
 - [Freedesktop.org Secret Service Specification](https://specifications.freedesktop.org/secret-service/0.2/)
-- [WSL Documentation](https://docs.microsoft.com/en-us/windows/wsl/)
+- [WSL Documentation](https://learn.microsoft.com/en-us/windows/wsl/)
+- [Development Guide](docs/development.md)
