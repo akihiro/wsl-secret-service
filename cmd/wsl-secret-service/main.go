@@ -104,7 +104,7 @@ func main() {
 	defer cancel()
 
 	// Start the Secret Service with timeout.
-	if _, err := service.New(ctx, conn, st, be, *timeout); err != nil {
+	if _, err := service.New(ctx, cancel, conn, st, be, *timeout); err != nil {
 		log.Fatalf("start secret service: %v", err)
 	}
 	log.Printf("org.freedesktop.secrets is ready")
