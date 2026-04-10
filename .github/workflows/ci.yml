@@ -10,6 +10,8 @@ jobs:
   test:
     name: Unit tests & vet
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
@@ -27,6 +29,8 @@ jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
@@ -40,6 +44,8 @@ jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
@@ -52,6 +58,8 @@ jobs:
   mod-tidy:
     name: go mod tidy
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
@@ -67,6 +75,8 @@ jobs:
   e2e:
     name: E2E tests (mock)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
