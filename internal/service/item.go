@@ -75,7 +75,8 @@ func (i *Item) GetSecret(session dbus.ObjectPath) (Secret, *dbus.Error) {
 
 	ct := meta.ContentType
 	if ct == "" {
-		ct = "text/plain; charset=utf8"
+		// libsecret's secret_value_get_text requires exactly "text/plain".
+		ct = "text/plain"
 	}
 
 	params, value, err := sess.encryptSecret(secretBytes)
@@ -247,8 +248,9 @@ func (svc *Service) updateCollectionItemsProp(collectionName string) {
 // itemMetaFromProperties parses item properties from a CreateItem call.
 func itemMetaFromProperties(properties map[string]dbus.Variant) store.ItemMeta {
 	meta := store.ItemMeta{
-		Attributes:  make(map[string]string),
-		ContentType: "text/plain; charset=utf8",
+		Attributes: make(map[string]string),
+		// ContentType is left empty so that the content type sent by the
+		// client in the Secret struct takes precedence (see CreateItem).
 	}
 	if v, ok := properties[CollectionIface+".Label"]; ok {
 		if s, ok := v.Value().(string); ok {
