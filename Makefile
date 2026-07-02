@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
-.PHONY: build build-linux build-windows build-mock-helper run-dev test e2e-test e2e-test-verbose e2e-test-debug e2e-test-dev e2e-test-dev-verbose e2e-test-wincred e2e-test-wincred-verbose e2e-clean clean install
+.PHONY: build build-linux build-windows build-mock-helper run-dev test e2e-test e2e-test-verbose e2e-test-debug e2e-test-dev e2e-test-dev-verbose e2e-test-activation e2e-test-wincred e2e-test-wincred-verbose e2e-clean clean install
 export GOEXPERIMENT=runtimesecret
 
 # Output directory for compiled binaries.
@@ -36,6 +36,11 @@ e2e-test-dev: build-linux build-mock-helper
 # Verbose dev E2E tests
 e2e-test-dev-verbose: build-linux build-mock-helper
 	@bash tests/e2e/run-tests-dev.sh -v
+
+# E2E regression tests for D-Bus activation cold-start behavior and the
+# secret-tool content-type round trip (no WSL2 or Windows required).
+e2e-test-activation: build-linux build-mock-helper
+	@bash tests/e2e/run-tests-activation.sh
 
 test:
 	go test ./...
