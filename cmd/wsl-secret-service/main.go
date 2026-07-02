@@ -70,20 +70,6 @@ func main() {
 		}
 	}()
 
-	// Request the well-known bus name.
-	nameFlags := dbus.NameFlagDoNotQueue
-	if *replace {
-		nameFlags |= dbus.NameFlagReplaceExisting
-	}
-	reply, err := conn.RequestName(service.BusName, nameFlags)
-	if err != nil {
-		log.Fatalf("request D-Bus name %s: %v", service.BusName, err)
-	}
-	if reply != dbus.RequestNameReplyPrimaryOwner {
-		log.Fatalf("D-Bus name %s is already owned (use --replace to take it over)", service.BusName)
-	}
-	log.Printf("claimed D-Bus name: %s", service.BusName)
-
 	// Initialise the metadata store.
 	st, err := store.New(*configDir)
 	if err != nil {
@@ -103,10 +89,27 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Start the Secret Service with timeout.
+	// Start the Secret Service with timeout. All D-Bus objects must be
+	// exported BEFORE the well-known name is claimed: with D-Bus activation,
+	// client messages queued by the bus daemon are delivered the instant the
+	// name is acquired, and would hit unexported objects otherwise.
 	if _, err := service.New(ctx, cancel, conn, st, be, *timeout); err != nil {
 		log.Fatalf("start secret service: %v", err)
 	}
+
+	// Request the well-known bus name now that all objects are exported.
+	nameFlags := dbus.NameFlagDoNotQueue
+	if *replace {
+		nameFlags |= dbus.NameFlagReplaceExisting
+	}
+	reply, err := conn.RequestName(service.BusName, nameFlags)
+	if err != nil {
+		log.Fatalf("request D-Bus name %s: %v", service.BusName, err)
+	}
+	if reply != dbus.RequestNameReplyPrimaryOwner {
+		log.Fatalf("D-Bus name %s is already owned (use --replace to take it over)", service.BusName)
+	}
+	log.Printf("claimed D-Bus name: %s", service.BusName)
 	log.Printf("org.freedesktop.secrets is ready")
 
 	// Set up signal handling for graceful shutdown.
