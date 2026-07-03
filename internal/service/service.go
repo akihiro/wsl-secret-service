@@ -429,11 +429,7 @@ func (svc *Service) GetSecrets(
 		if err != nil {
 			continue // Skip items whose secrets can't be retrieved.
 		}
-		ct := meta.ContentType
-		if ct == "" {
-			// libsecret's secret_value_get_text requires exactly "text/plain".
-			ct = "text/plain"
-		}
+		ct := normalizeContentType(meta.ContentType)
 		params, value, err := sess.encryptSecret(secretBytes)
 		if err != nil {
 			log.Printf("warning: could not encrypt secret for %s: %v", itemPath, err)

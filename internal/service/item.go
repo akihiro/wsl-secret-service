@@ -24,6 +24,23 @@ func (i *Item) itemTarget() string {
 	return fmt.Sprintf("wsl-ss/%s/%s", i.collectionName, i.uuid)
 }
 
+// legacyDefaultContentType is the content type that older versions
+// unconditionally persisted for every item, regardless of what the client
+// sent. libsecret's secret_value_get_text requires exactly "text/plain",
+// so this value made secrets unreadable as text for libsecret clients.
+const legacyDefaultContentType = "text/plain; charset=utf8"
+
+// normalizeContentType maps a stored content type to the value returned to
+// clients. Empty values and the legacy default are normalized to
+// "text/plain" for libsecret compatibility; anything else is a value the
+// client explicitly supplied and is preserved verbatim.
+func normalizeContentType(ct string) string {
+	if ct == "" || ct == legacyDefaultContentType {
+		return "text/plain"
+	}
+	return ct
+}
+
 // Delete implements org.freedesktop.Secret.Item.Delete().
 // Removes the item from the metadata store and backend, then unexports the D-Bus object.
 // Returns "/" (no prompt needed).
@@ -73,11 +90,7 @@ func (i *Item) GetSecret(session dbus.ObjectPath) (Secret, *dbus.Error) {
 			fmt.Sprintf("retrieve secret: %v", err))
 	}
 
-	ct := meta.ContentType
-	if ct == "" {
-		// libsecret's secret_value_get_text requires exactly "text/plain".
-		ct = "text/plain"
-	}
+	ct := normalizeContentType(meta.ContentType)
 
 	params, value, err := sess.encryptSecret(secretBytes)
 	if err != nil {
