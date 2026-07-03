@@ -41,8 +41,9 @@ type Service struct {
 //   - subscribes to NameOwnerChanged to clean up orphaned sessions
 //   - starts idle timeout monitor with the given timeout duration
 //
-// The caller is responsible for requesting the well-known bus name before
-// calling New, or passing replaceExisting=true to RequestName.
+// The caller must request the well-known bus name AFTER calling New: under
+// D-Bus activation, queued client messages are delivered as soon as the name
+// is acquired and must find all objects already exported.
 func New(ctx context.Context, cancel context.CancelFunc, conn *dbus.Conn, st *store.Store, be backend.Backend, timeoutDuration time.Duration) (*Service, error) {
 	svc := &Service{
 		conn:                  conn,
@@ -428,10 +429,7 @@ func (svc *Service) GetSecrets(
 		if err != nil {
 			continue // Skip items whose secrets can't be retrieved.
 		}
-		ct := meta.ContentType
-		if ct == "" {
-			ct = "text/plain; charset=utf8"
-		}
+		ct := normalizeContentType(meta.ContentType)
 		params, value, err := sess.encryptSecret(secretBytes)
 		if err != nil {
 			log.Printf("warning: could not encrypt secret for %s: %v", itemPath, err)

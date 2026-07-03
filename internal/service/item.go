@@ -24,6 +24,23 @@ func (i *Item) itemTarget() string {
 	return fmt.Sprintf("wsl-ss/%s/%s", i.collectionName, i.uuid)
 }
 
+// legacyDefaultContentType is the content type that older versions
+// unconditionally persisted for every item, regardless of what the client
+// sent. libsecret's secret_value_get_text requires exactly "text/plain",
+// so this value made secrets unreadable as text for libsecret clients.
+const legacyDefaultContentType = "text/plain; charset=utf8"
+
+// normalizeContentType maps a stored content type to the value returned to
+// clients. Empty values and the legacy default are normalized to
+// "text/plain" for libsecret compatibility; anything else is a value the
+// client explicitly supplied and is preserved verbatim.
+func normalizeContentType(ct string) string {
+	if ct == "" || ct == legacyDefaultContentType {
+		return "text/plain"
+	}
+	return ct
+}
+
 // Delete implements org.freedesktop.Secret.Item.Delete().
 // Removes the item from the metadata store and backend, then unexports the D-Bus object.
 // Returns "/" (no prompt needed).
@@ -73,10 +90,7 @@ func (i *Item) GetSecret(session dbus.ObjectPath) (Secret, *dbus.Error) {
 			fmt.Sprintf("retrieve secret: %v", err))
 	}
 
-	ct := meta.ContentType
-	if ct == "" {
-		ct = "text/plain; charset=utf8"
-	}
+	ct := normalizeContentType(meta.ContentType)
 
 	params, value, err := sess.encryptSecret(secretBytes)
 	if err != nil {
@@ -247,8 +261,9 @@ func (svc *Service) updateCollectionItemsProp(collectionName string) {
 // itemMetaFromProperties parses item properties from a CreateItem call.
 func itemMetaFromProperties(properties map[string]dbus.Variant) store.ItemMeta {
 	meta := store.ItemMeta{
-		Attributes:  make(map[string]string),
-		ContentType: "text/plain; charset=utf8",
+		Attributes: make(map[string]string),
+		// ContentType is left empty so that the content type sent by the
+		// client in the Secret struct takes precedence (see CreateItem).
 	}
 	if v, ok := properties[CollectionIface+".Label"]; ok {
 		if s, ok := v.Value().(string); ok {
